@@ -1,0 +1,30 @@
+<div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+  @if (saveError()) {
+    <div class="alert alert-error mb-3 py-2 text-sm">{{ saveError() }}</div>
+  }
+
+  <form [formGroup]="form()" (ngSubmit)="submit()" class="flex flex-col gap-3">
+    <div>
+      <label class="label label-text text-xs" for="history-kcal-{{ dateKey() }}">kcal</label>
+      <input
+        id="history-kcal-{{ dateKey() }}"
+        type="number"
+        formControlName="kcal_delta"
+        class="input input-sm w-full"
+        [class.input-error]="form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched"
+      />
+    </div>
+
+    <div class="flex gap-2 justify-end">
+      <button type="button" class="btn btn-ghost btn-sm" (click)="cancelRequested.emit()">
+        Cancel
+      </button>
+      <button type="submit" class="btn btn-primary btn-sm" [disabled]="saveLoading()">
+        @if (saveLoading()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ editing() ? 'Save' : 'Add' }}
+      </button>
+    </div>
+  </form>
+</div>

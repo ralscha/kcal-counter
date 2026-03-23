@@ -1,0 +1,43 @@
+<div class="card bg-base-100 shadow-xl">
+  <div class="card-body gap-5 p-5 sm:p-6">
+    <div class="space-y-2 text-center">
+      <h2 class="card-title justify-center text-xl">Sign in</h2>
+    </div>
+
+    @if (error()) {
+      <div class="alert alert-error py-2 text-sm">{{ error() }}</div>
+    }
+
+    <button
+      type="button"
+      class="btn btn-primary w-full gap-2"
+      (click)="signInWithPasskey()"
+      [disabled]="passkeyLoading()"
+    >
+      @if (passkeyLoading()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      } @else {
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+          />
+        </svg>
+      }
+      Continue with passkey
+    </button>
+
+    <p class="text-center text-sm text-base-content/60">
+      Need an account?
+      <a routerLink="/auth/register" class="link link-primary inline-block py-1">Register</a>
+    </p>
+  </div>
+</div>

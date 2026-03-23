@@ -1,0 +1,54 @@
+version: '3'
+
+vars:
+  APP: kcal-counter
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  run:
+    desc: Run the HTTP server
+    cmds:
+      - go run ./cmd/app
+
+  build:
+    desc: Build the HTTP server binary
+    cmds:
+      - go build -o ./bin/app ./cmd/app
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  coverage:
+    desc: Generate test coverage report
+    cmds:
+      - go test -coverprofile=coverage.raw.out ./...
+      - go run ./cmd/coveragefilter -in coverage.raw.out -out coverage.out -exclude kcal-counter/internal/store/sqlc/
+      - go tool cover -func=coverage.out
+      - go tool cover -html=coverage.out -o coverage.html
+
+  lint:
+    desc: Run golangci-lint in a Docker container
+    cmds:
+      - docker run --rm -v {{toSlash .ROOT_DIR}}:/app -w /app golangci/golangci-lint:v2.11.4 golangci-lint run -v --timeout 5m
+
+  format:
+    desc: Format Go code
+    cmds:
+      - go fix ./...
+      - go fmt ./...
+
+  db:build-sqlc:
+    desc: Build the sqlc docker image
+    cmds:
+      - docker build -t sqlc -f sqlc/Dockerfile .
+
+  db:run-sqlc:
+    desc: Generate sqlc code in Docker
+    cmds:
+      - docker run --rm -v {{toSlash .ROOT_DIR}}:/src sqlc

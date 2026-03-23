@@ -1,0 +1,93 @@
+<section
+  class="flex flex-col gap-4 rounded-box border border-base-300 bg-base-100 p-4 shadow-sm md:p-5"
+>
+  <div class="flex items-start justify-between gap-3">
+    <div class="flex items-start gap-3">
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm btn-circle mt-0.5"
+        aria-label="Back to days"
+        (click)="back.emit()"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+      </button>
+
+      <div>
+        <div class="text-sm font-semibold text-base-content">Entries for {{ day().dateLabel }}</div>
+        <div class="text-xs text-base-content/55">
+          {{ day().weekdayLabel }} · {{ day().entries.length }}
+          {{ day().entries.length === 1 ? 'entry' : 'entries' }}
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="text-right text-sm font-semibold tabular-nums"
+      [class.text-success]="day().total > 0"
+      [class.text-warning]="day().total < 0"
+    >
+      {{ day().total > 0 ? '+' : '' }}{{ day().total }} kcal
+    </div>
+  </div>
+
+  @if (formDay() === day().dateKey) {
+    <app-history-entry-form
+      [dateKey]="day().dateKey"
+      [form]="form()"
+      [saveLoading]="saveLoading()"
+      [saveError]="saveError()"
+      [editing]="editing()"
+      (cancelRequested)="cancelForm.emit()"
+      (saveRequested)="saveEntry.emit($event)"
+    />
+  } @else {
+    @if (day().entries.length === 0) {
+      <div
+        class="flex min-h-48 items-center justify-center rounded-xl border border-dashed border-base-300 bg-base-200/40 px-4 py-6 text-center text-sm text-base-content/45"
+      >
+        No entries recorded for this day.
+      </div>
+    } @else {
+      <app-history-entry-list
+        [entries]="day().entries"
+        (openEdit)="openEdit.emit($event)"
+        (requestDelete)="requestDelete.emit($event)"
+      />
+    }
+  }
+</section>
+
+@if (formDay() !== day().dateKey) {
+  <div class="fixed bottom-6 right-6 z-10 md:bottom-8 md:right-8">
+    <button
+      type="button"
+      class="btn btn-primary btn-circle btn-lg shadow-lg"
+      aria-label="Add entry"
+      title="Add entry"
+      (click)="openAdd.emit(day().dateKey)"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-6 w-6"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
+  </div>
+}

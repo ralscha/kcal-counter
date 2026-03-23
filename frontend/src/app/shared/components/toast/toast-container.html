@@ -1,0 +1,26 @@
+@if (toastService.messages().length > 0) {
+  <div class="toast toast-end toast-bottom z-50" aria-live="polite" aria-atomic="false">
+    @for (toast of toastService.messages(); track toast.id) {
+      <div
+        class="alert min-w-72 max-w-sm shadow-lg"
+        [class]="'alert min-w-72 max-w-sm shadow-lg ' + alertClassByKind[toast.kind]"
+        [attr.role]="toast.kind === 'error' || toast.kind === 'warning' ? 'alert' : 'status'"
+      >
+        <div class="flex flex-1 flex-col gap-1">
+          @if (toast.title) {
+            <span class="text-sm font-semibold">{{ toast.title }}</span>
+          }
+          <span class="text-sm">{{ toast.message }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          (click)="dismiss(toast.id)"
+          aria-label="Dismiss notification"
+        >
+          Dismiss
+        </button>
+      </div>
+    }
+  </div>
+}

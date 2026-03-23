@@ -1,0 +1,254 @@
+<div class="h-screen flex overflow-hidden bg-base-200">
+  <aside class="hidden md:flex flex-col w-64 border-r border-base-300 bg-base-100 shrink-0">
+    <div
+      class="flex h-14 items-center gap-2 px-4 border-b border-base-300 bg-primary text-primary-content"
+    >
+      <img
+        ngSrc="brand-mark.png"
+        width="28"
+        height="28"
+        alt=""
+        aria-hidden="true"
+        class="h-7 w-7 shrink-0 rounded-xl"
+      />
+      <span class="font-bold text-lg">KcalCounter</span>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
+      @for (item of navigationItems; track item.route) {
+        <a
+          [routerLink]="item.route"
+          routerLinkActive="bg-primary/10 text-primary font-medium"
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-base-content/70 hover:bg-base-200 hover:text-base-content transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5 shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              [attr.d]="item.iconPath"
+            />
+          </svg>
+          {{ item.label }}
+        </a>
+      }
+    </nav>
+
+    <div class="border-t border-base-300 p-3 flex items-center gap-2">
+      <div class="min-w-0 flex-1"></div>
+      <button class="btn btn-ghost btn-sm btn-circle" title="Sign out" (click)="signOut()">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+          />
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <header
+      class="md:hidden flex h-14 items-center gap-3 px-4 border-b border-base-300 bg-base-100 shrink-0"
+    >
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm btn-circle"
+        aria-label="Open navigation menu"
+        aria-controls="mobile-navigation-drawer"
+        [attr.aria-expanded]="showMobileNav()"
+        (click)="toggleMobileNav()"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 6h16M4 12h16M4 18h16"
+          />
+        </svg>
+      </button>
+      <img
+        ngSrc="brand-mark.png"
+        width="28"
+        height="28"
+        alt=""
+        aria-hidden="true"
+        class="h-7 w-7 shrink-0 rounded-xl"
+      />
+      <span class="font-bold flex-1">KcalCounter</span>
+    </header>
+
+    <div
+      class="md:hidden fixed inset-0 z-40 flex overflow-hidden"
+      [class.pointer-events-none]="!showMobileNav()"
+      [class.pointer-events-auto]="showMobileNav()"
+    >
+      <aside
+        id="mobile-navigation-drawer"
+        class="flex h-full w-72 max-w-[85vw] flex-col border-r border-base-300 bg-base-100 transition-transform duration-300 ease-out"
+        aria-label="Mobile navigation"
+        [attr.aria-hidden]="!showMobileNav()"
+        [class.-translate-x-full]="!showMobileNav()"
+        [class.translate-x-0]="showMobileNav()"
+        [class.shadow-none]="!showMobileNav()"
+        [class.shadow-2xl]="showMobileNav()"
+      >
+        <div
+          class="flex h-14 items-center gap-3 px-4 border-b border-base-300 bg-primary text-primary-content"
+        >
+          <img
+            ngSrc="brand-mark.png"
+            width="28"
+            height="28"
+            alt=""
+            aria-hidden="true"
+            class="h-7 w-7 shrink-0 rounded-xl"
+          />
+          <span class="font-semibold flex-1">KcalCounter</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-circle text-primary-content hover:bg-primary-content/10"
+            aria-label="Close navigation menu"
+            (click)="closeMobileNav()"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <nav class="flex flex-col gap-1 p-3">
+          @for (item of navigationItems; track item.route) {
+            <a
+              [routerLink]="item.route"
+              routerLinkActive="bg-primary/10 text-primary font-medium"
+              class="flex items-center gap-3 rounded-lg px-3 py-2 text-base-content/70 transition-colors hover:bg-base-200 hover:text-base-content"
+              (click)="closeMobileNav()"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  [attr.d]="item.iconPath"
+                />
+              </svg>
+              {{ item.label }}
+            </a>
+          }
+        </nav>
+
+        <div class="mt-auto border-t border-base-300 p-3 flex items-center gap-2">
+          <div class="min-w-0 flex-1"></div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-error"
+            title="Sign out"
+            aria-label="Sign out"
+            (click)="signOut()"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+          </button>
+        </div>
+      </aside>
+      <button
+        type="button"
+        class="flex-1 bg-base-content/30 transition-opacity duration-300 ease-out"
+        aria-label="Close navigation menu"
+        [attr.aria-hidden]="!showMobileNav()"
+        [class.opacity-0]="!showMobileNav()"
+        [class.opacity-100]="showMobileNav()"
+        [class.pointer-events-none]="!showMobileNav()"
+        (click)="closeMobileNav()"
+      ></button>
+    </div>
+
+    <main class="flex-1 overflow-y-auto">
+      @if (sync.syncNotice(); as syncNotice) {
+        <div
+          [class]="
+            'mx-4 mt-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm text-base-content md:mx-6 ' +
+            (syncNotice.tone === 'warning'
+              ? 'border-warning/30 bg-warning/10'
+              : 'border-info/30 bg-info/10')
+          "
+        >
+          <div class="flex-1">
+            <p class="font-semibold">{{ syncNotice.title }}</p>
+            <p class="mt-1">{{ syncNotice.message }}</p>
+            @if (syncNotice.details.length > 0) {
+              <ul class="mt-2 list-disc space-y-1 pl-5 text-xs sm:text-sm">
+                @for (detail of syncNotice.details; track detail.message) {
+                  <li>
+                    <span>{{ detail.message }}</span>
+                    @if (detail.routeCommands && detail.queryParams && detail.reviewLabel) {
+                      <a
+                        class="link link-hover ml-2 text-xs font-semibold sm:text-sm"
+                        [routerLink]="detail.routeCommands"
+                        [queryParams]="detail.queryParams"
+                        >{{ detail.reviewLabel }}</a
+                      >
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+          <button class="btn btn-ghost btn-xs" (click)="sync.dismissSyncNotice()">Dismiss</button>
+        </div>
+      }
+      <router-outlet />
+    </main>
+  </div>
+</div>

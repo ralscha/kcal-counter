@@ -1,0 +1,76 @@
+<div class="card border border-base-300 bg-base-100 shadow-sm">
+  <div class="card-body p-4 gap-3">
+    <h2 class="font-semibold text-sm text-base-content">
+      {{ editingItem() ? 'Edit list item' : 'New list item' }}
+      <span class="text-base-content/50">· {{ activeKind() }}</span>
+    </h2>
+
+    @if (formError()) {
+      <div class="alert alert-error text-sm py-2">{{ formError() }}</div>
+    }
+
+    <form [formGroup]="form()" (ngSubmit)="saveRequested.emit()" class="flex flex-col gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="label label-text text-xs" for="name">Name</label>
+        <input
+          id="name"
+          type="text"
+          formControlName="name"
+          class="input input-sm w-full"
+          [class.input-error]="form().get('name')?.invalid && form().get('name')?.touched"
+          placeholder="e.g. Rice"
+        />
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-3">
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-xs" for="amount">Amount</label>
+          <input
+            id="amount"
+            type="text"
+            formControlName="amount"
+            class="input input-sm w-full"
+            [class.input-error]="form().get('amount')?.invalid && form().get('amount')?.touched"
+            placeholder="100"
+          />
+        </div>
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-xs" for="unit">Unit</label>
+          <input
+            id="unit"
+            type="text"
+            formControlName="unit"
+            class="input input-sm w-full"
+            [class.input-error]="form().get('unit')?.invalid && form().get('unit')?.touched"
+            placeholder="g"
+          />
+        </div>
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-xs" for="kcal_amount">kcal</label>
+          <input
+            id="kcal_amount"
+            type="number"
+            formControlName="kcal_amount"
+            class="input input-sm w-full"
+            [class.input-error]="
+              form().get('kcal_amount')?.invalid && form().get('kcal_amount')?.touched
+            "
+            min="1"
+          />
+        </div>
+      </div>
+
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="cancelRequested.emit()">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm" [disabled]="formLoading()">
+          @if (formLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ editingItem() ? 'Save' : 'Add' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

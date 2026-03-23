@@ -1,0 +1,36 @@
+<div class="mx-auto flex max-w-4xl flex-col gap-4 p-4 md:p-6">
+  <app-history-week-nav
+    [weekLabel]="weekLabel()"
+    [canGoForward]="canGoForward()"
+    (previousWeek)="previousWeek()"
+    (nextWeek)="nextWeek()"
+  />
+
+  @if (selectedDayDetails(); as day) {
+    <app-history-day-details
+      [day]="day"
+      [formDay]="formDay()"
+      [form]="form"
+      [saveLoading]="saveLoading()"
+      [saveError]="saveError()"
+      [editing]="!!editingEntry()"
+      (back)="backToDays()"
+      (openAdd)="openAdd($event)"
+      (openEdit)="openEdit(day.dateKey, $event)"
+      (cancelForm)="cancelForm()"
+      (saveEntry)="saveEntry($event)"
+      (requestDelete)="requestDelete($event)"
+    />
+  } @else {
+    <app-history-day-list [days]="days()" (openDay)="openDay($event)" />
+  }
+
+  @if (pendingDeleteEntry(); as entry) {
+    <app-history-delete-modal
+      [entry]="entry"
+      [dateLabel]="selectedDayDetails()?.dateLabel ?? ''"
+      (cancelRequested)="cancelDelete()"
+      (confirmRequested)="confirmDelete()"
+    />
+  }
+</div>
