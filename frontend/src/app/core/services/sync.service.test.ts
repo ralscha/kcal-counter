@@ -335,6 +335,71 @@ describe('SyncService', () => {
     expect(await db.pendingMutations.count()).toBe(0);
   });
 
+  it('rounds fractional queued entry calories before posting sync payloads', async () => {
+    const db = new FakeDbService();
+    const storage = new FakeStorageService();
+    const postCalls: HttpCall[] = [];
+
+    await db.pendingMutations.bulkAdd([
+      {
+        kind: 'entry',
+        payload: {
+          entity_table: 'kcal_entries',
+          id: 'entry-fractional',
+          kcal_delta: 97.5,
+          happened_at: '2026-03-26T04:27:00Z',
+          deleted: false,
+          client_updated_at: '2026-03-26T04:28:36.905Z',
+        },
+      },
+    ]);
+    storage.set('device_id', 'device-fractional');
+
+    const http = {
+      post: (url: string, body: unknown, options: unknown) => {
+        postCalls.push({ url, body, options });
+        return of({
+          data: {
+            reset_required: false,
+            last_sync_seq: 1,
+            min_valid_seq: 0,
+            push_results: [
+              {
+                applied: true,
+                record: {
+                  entity_table: 'kcal_entries',
+                  id: 'entry-fractional',
+                  kcal_delta: 98,
+                  happened_at: '2026-03-26T04:27:00Z',
+                  deleted: false,
+                  client_updated_at: '2026-03-26T04:28:36.905Z',
+                  global_version: 1,
+                  server_updated_at: '2026-03-26T04:28:37.000Z',
+                },
+              },
+            ],
+            pull_changes: [],
+          },
+        } satisfies KcalSyncResponse);
+      },
+    };
+
+    const service = createService({
+      http: http as Pick<HttpClient, 'post'>,
+      storage: storage as unknown as StorageService,
+      db: db as unknown as DbService,
+    });
+
+    await service.pull();
+
+    expect(postCalls).toHaveLength(1);
+    const request = postCalls[0]?.body as {
+      changes: { id: string; kcal_delta?: number }[];
+    };
+    expect(request.changes).toHaveLength(1);
+    expect(request.changes[0]).toMatchObject({ id: 'entry-fractional', kcal_delta: 98 });
+  });
+
   it('builds a notice for discarded offline changes', async () => {
     const db = new FakeDbService();
     const storage = new FakeStorageService();

@@ -15,6 +15,8 @@ import {
   buildBatchSyncRequest,
   buildQueuedMutationIndex,
   dedupeQueuedMutations,
+  normalizeEntry,
+  normalizeSyncChange,
   queuedMutationKey,
   type QueuedSyncMutation,
 } from './sync-push.util';
@@ -31,17 +33,6 @@ function normalizeTemplateItem(item: KcalTemplateItem): KcalTemplateItem {
     ...item,
     amount: String(item.amount).trim(),
   };
-}
-
-function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
-  if (change.entity_table === 'kcal_template_items') {
-    return {
-      ...change,
-      amount: String(change.amount).trim(),
-    };
-  }
-
-  return { ...change };
 }
 
 function compareClientUpdatedAt(left: string, right: string): number {
@@ -516,18 +507,19 @@ export class SyncService {
 
   upsertEntry(entry: KcalEntry): void {
     const updatedAt = this.#timestamp();
+    const normalizedEntry = normalizeEntry(entry);
     this.entries.update((list) => {
-      const idx = list.findIndex((current) => current.id === entry.id);
+      const idx = list.findIndex((current) => current.id === normalizedEntry.id);
       if (idx >= 0) {
         const updated = [...list];
-        updated[idx] = entry;
+        updated[idx] = normalizedEntry;
         return updated;
       }
-      return [...list, entry];
+      return [...list, normalizedEntry];
     });
     void this.#persistAndPush('entry', {
       entity_table: 'kcal_entries',
-      ...entry,
+      ...normalizedEntry,
       deleted: false,
       client_updated_at: updatedAt,
     });

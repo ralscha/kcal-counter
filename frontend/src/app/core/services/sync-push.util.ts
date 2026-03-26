@@ -1,4 +1,4 @@
-import { KcalSyncChange, KcalSyncRequest } from '../models/kcal.model';
+import { KcalEntry, KcalSyncChange, KcalSyncRequest } from '../models/kcal.model';
 
 export type PendingMutationKind = 'template' | 'entry';
 
@@ -8,7 +8,23 @@ export interface QueuedSyncMutation {
   payload: KcalSyncChange;
 }
 
-function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
+export function normalizeKcalDelta(value: number): number {
+  if (!Number.isFinite(value)) {
+    return value;
+  }
+
+  const rounded = value < 0 ? -Math.round(Math.abs(value)) : Math.round(value);
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+export function normalizeEntry(entry: KcalEntry): KcalEntry {
+  return {
+    ...entry,
+    kcal_delta: normalizeKcalDelta(entry.kcal_delta),
+  };
+}
+
+export function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
   if (change.entity_table === 'kcal_template_items') {
     return {
       ...change,
@@ -16,7 +32,10 @@ function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
     };
   }
 
-  return { ...change };
+  return {
+    ...change,
+    kcal_delta: normalizeKcalDelta(change.kcal_delta),
+  };
 }
 
 function normalizeQueuedMutation(mutation: QueuedSyncMutation): QueuedSyncMutation {
