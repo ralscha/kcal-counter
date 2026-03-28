@@ -71,19 +71,6 @@
                 : '')
             "
           />
-          @if (
-            form().get('kcal_delta')?.hasError('kcalExpression') &&
-            form().get('kcal_delta')?.touched
-          ) {
-            <p id="dashboard-kcal-help" class="text-error text-xs">
-              Enter a number or a calculation using +, -, * or /.
-            </p>
-          } @else {
-            <p id="dashboard-kcal-help" class="text-base-content/60 text-xs">
-              Use the keypad or type an expression like 3*50. Invalid operator sequences are
-              filtered.
-            </p>
-          }
         </div>
 
         <div class="flex flex-col gap-1 sm:w-40">
