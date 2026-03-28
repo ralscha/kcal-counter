@@ -60,11 +60,14 @@ func RateLimitByIP(limiter limiter, keyPrefix string, logger *slog.Logger) func(
 }
 
 func clientIP(r *http.Request) string {
-	forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0])
-	if forwarded != "" {
-		return forwarded
+	// In production the reverse proxy (Caddy) strips any client-provided
+	// X-Real-IP header and replaces it with the actual TCP peer address,
+	// making this header trustworthy. In development (no proxy) the header
+	// is absent and we fall back to r.RemoteAddr, which is the raw TCP
+	// connection address — never influenced by request headers.
+	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+		return xrip
 	}
-
 	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
 	if err == nil {
 		return host

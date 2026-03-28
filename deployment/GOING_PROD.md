@@ -207,7 +207,12 @@ app.example.com {
   @api path /api/*
   handle @api {
     encode zstd gzip
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:8080 {
+      header_up -X-Forwarded-For
+      header_up -X-Real-IP
+      header_up X-Real-IP {http.request.remote.host}
+      header_up X-Forwarded-For {http.request.remote.host}
+    }
   }
 
   handle {
@@ -224,6 +229,7 @@ app.example.com {
     X-Frame-Options "DENY"
     Referrer-Policy "strict-origin-when-cross-origin"
     Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   }
 }
 ```
