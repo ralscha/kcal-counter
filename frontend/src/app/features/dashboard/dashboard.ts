@@ -1,17 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import {
-  AbstractControl,
-  FormBuilder,
-  ReactiveFormsModule,
-  ValidationErrors,
-  ValidatorFn,
-  Validators,
-} from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SyncService } from '../../core/services/sync.service';
 import { KcalEntry, KcalTemplateItem, KcalTemplateKind } from '../../core/models/kcal.model';
 import { ProfilePreferencesService } from '../../core/services/profile-preferences.service';
 import { generateUuid } from '../../shared/utils/uuid';
+import {
+  kcalExpressionValidator,
+  parseArithmeticExpression,
+} from '../../shared/utils/arithmetic-expression';
 import { DashboardEntryFormModalComponent } from './components/dashboard-entry-form-modal';
 import { DashboardSummaryComponent } from './components/dashboard-summary';
 import { DashboardTemplatePickerModalComponent } from './components/dashboard-template-picker-modal';
@@ -60,153 +57,6 @@ function localTimeFromIso(iso: string): string {
   const local = new Date(iso);
   return `${pad(local.getHours())}:${pad(local.getMinutes())}`;
 }
-
-function parseKcalExpression(value: number | string | null | undefined): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  const normalized = value?.trim().replaceAll(',', '.');
-  if (!normalized) {
-    return null;
-  }
-
-  let index = 0;
-
-  const skipWhitespace = (): void => {
-    while (normalized[index] === ' ') {
-      index += 1;
-    }
-  };
-
-  const parseNumber = (): number | null => {
-    skipWhitespace();
-
-    let hasDigit = false;
-    let hasDecimalSeparator = false;
-    const start = index;
-
-    while (index < normalized.length) {
-      const char = normalized[index];
-      if (char >= '0' && char <= '9') {
-        hasDigit = true;
-        index += 1;
-        continue;
-      }
-
-      if (char === '.') {
-        if (hasDecimalSeparator) {
-          return null;
-        }
-
-        hasDecimalSeparator = true;
-        index += 1;
-        continue;
-      }
-
-      break;
-    }
-
-    if (!hasDigit) {
-      return null;
-    }
-
-    const parsed = Number(normalized.slice(start, index));
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const parseFactor = (): number | null => {
-    skipWhitespace();
-
-    const operator = normalized[index];
-    if (operator === '+' || operator === '-') {
-      index += 1;
-      const factor = parseFactor();
-      if (factor == null) {
-        return null;
-      }
-
-      return operator === '-' ? -factor : factor;
-    }
-
-    return parseNumber();
-  };
-
-  const parseTerm = (): number | null => {
-    let result = parseFactor();
-    if (result == null) {
-      return null;
-    }
-
-    while (true) {
-      skipWhitespace();
-      const operator = normalized[index];
-      if (operator !== '*' && operator !== '/') {
-        return result;
-      }
-
-      index += 1;
-      const rightSide = parseFactor();
-      if (rightSide == null) {
-        return null;
-      }
-
-      if (operator === '*') {
-        result *= rightSide;
-        continue;
-      }
-
-      if (rightSide === 0) {
-        return null;
-      }
-
-      result /= rightSide;
-    }
-  };
-
-  const parseExpression = (): number | null => {
-    let result = parseTerm();
-    if (result == null) {
-      return null;
-    }
-
-    while (true) {
-      skipWhitespace();
-      const operator = normalized[index];
-      if (operator !== '+' && operator !== '-') {
-        return result;
-      }
-
-      index += 1;
-      const rightSide = parseTerm();
-      if (rightSide == null) {
-        return null;
-      }
-
-      result = operator === '+' ? result + rightSide : result - rightSide;
-    }
-  };
-
-  const parsed = parseExpression();
-  skipWhitespace();
-
-  if (parsed == null || index !== normalized.length || !Number.isFinite(parsed)) {
-    return null;
-  }
-
-  return parsed;
-}
-
-const kcalExpressionValidator: ValidatorFn = (
-  control: AbstractControl,
-): ValidationErrors | null => {
-  const value = control.value;
-  if (value == null || value === '') {
-    return null;
-  }
-
-  return parseKcalExpression(value) == null ? { kcalExpression: true } : null;
-};
 
 function toIsoFromLocalDateAndTime(dateKey: string, time: string): string {
   const [hours, minutes] = time.split(':').map(Number);
@@ -268,6 +118,8 @@ export class DashboardComponent {
   protected readonly totalKcal = computed(() =>
     this.dayEntries().reduce((sum, e) => sum + e.kcal_delta, 0),
   );
+
+  protected readonly recentEntries = computed(() => this.dayEntries().slice(0, 3));
 
   protected readonly addableTemplates = computed(() => {
     const kind = this.addTemplateKind();
@@ -384,8 +236,7 @@ export class DashboardComponent {
     this.templateSearchQuery.set((event.target as HTMLInputElement).value);
   }
 
-  protected onTemplateAmountInput(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
+  protected onTemplateAmountInput(value: string): void {
     this.templateAmountInput.set(value);
 
     const template = this.selectedAddTemplate();
@@ -415,6 +266,16 @@ export class DashboardComponent {
     this.showTemplatePicker.set(true);
   }
 
+  protected backToAddForm(): void {
+    if (this.editingEntry()) {
+      return;
+    }
+
+    this.addError.set('');
+    this.showTemplatePicker.set(false);
+    this.showAddForm.set(true);
+  }
+
   protected cancelAdd(): void {
     this.showAddForm.set(false);
     this.showTemplatePicker.set(false);
@@ -435,7 +296,7 @@ export class DashboardComponent {
     this.addError.set('');
     try {
       const { kcal_delta, happened_at } = this.form.getRawValue();
-      const parsedKcal = parseKcalExpression(kcal_delta);
+      const parsedKcal = parseArithmeticExpression(kcal_delta);
       if (parsedKcal == null) {
         this.form.get('kcal_delta')?.markAsTouched();
         return;

@@ -17,6 +17,7 @@ import {
   dedupeQueuedMutations,
   normalizeEntry,
   normalizeSyncChange,
+  normalizeTemplateAmount,
   queuedMutationKey,
   type QueuedSyncMutation,
 } from './sync-push.util';
@@ -31,7 +32,7 @@ const SYNC_RETRY_MAX_MS = 30_000;
 function normalizeTemplateItem(item: KcalTemplateItem): KcalTemplateItem {
   return {
     ...item,
-    amount: String(item.amount).trim(),
+    amount: normalizeTemplateAmount(item.amount),
   };
 }
 
@@ -103,12 +104,18 @@ export class SyncService {
     pendingMutationCount: number;
     hasSnapshot: boolean;
   }> {
-    const [templates, entries, pendingMutationCount, snapshot] = await Promise.all([
+    const [rawTemplates, entries, pendingMutationCount, snapshot] = await Promise.all([
       this.#db.templates.toArray(),
       this.#db.entries.toArray(),
       this.#db.pendingMutations.count(),
       this.#db.syncState.get(SYNC_SNAPSHOT_RECORD_ID),
     ]);
+
+    const templates = rawTemplates.map((template) => normalizeTemplateItem(template));
+    if (rawTemplates.some((template, index) => template.amount !== templates[index]?.amount)) {
+      await this.#db.templates.bulkPut(templates);
+    }
+
     this.templates.set(templates);
     this.entries.set(entries);
     return {

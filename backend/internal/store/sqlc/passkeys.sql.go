@@ -8,10 +8,9 @@ package sqlc
 import (
 	"context"
 
-	"kcal-counter/internal/store/dbtype"
-
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"kcal-counter/internal/store/dbtype"
 )
 
 const createPasskeyCredential = `-- name: CreatePasskeyCredential :one
@@ -150,7 +149,7 @@ SET
     sign_count = $5,
     clone_warning = $6,
     transports = $7,
-	credential_data = $8
+    credential_data = $8
 WHERE credential_id = $1
 `
 

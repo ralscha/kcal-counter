@@ -24,11 +24,28 @@ export function normalizeEntry(entry: KcalEntry): KcalEntry {
   };
 }
 
+export function normalizeTemplateAmount(value: string | number): string {
+  const normalized = String(value).trim().replace(',', '.');
+  if (!normalized) {
+    return '';
+  }
+
+  if (!/^\d*(\.\d*)?$/.test(normalized) || !/\d/.test(normalized)) {
+    return normalized;
+  }
+
+  const [rawIntegerPart, rawFractionPart = ''] = normalized.split('.');
+  const integerPart = rawIntegerPart.replace(/^0+(?=\d)/, '') || '0';
+  const fractionPart = rawFractionPart.replace(/0+$/, '');
+
+  return fractionPart ? `${integerPart}.${fractionPart}` : integerPart;
+}
+
 export function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
   if (change.entity_table === 'kcal_template_items') {
     return {
       ...change,
-      amount: String(change.amount).trim(),
+      amount: normalizeTemplateAmount(change.amount),
     };
   }
 

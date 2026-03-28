@@ -25,14 +25,24 @@
       <div class="grid gap-3 md:grid-cols-3">
         <div class="flex flex-col gap-1 flex-1">
           <label class="label label-text text-xs" for="amount">Amount</label>
-          <input
-            id="amount"
-            type="text"
+          <app-custom-keypad-input
+            inputId="amount"
             formControlName="amount"
-            class="input input-sm w-full"
-            [class.input-error]="form().get('amount')?.invalid && form().get('amount')?.touched"
+            [keypadRows]="decimalKeypadRows"
+            [inputConstraint]="'decimal'"
+            [inputMode]="'decimal'"
+            [describedBy]="'template-amount-help'"
+            [invalid]="!!(form().get('amount')?.invalid && form().get('amount')?.touched)"
+            [inputClass]="
+              'input input-sm w-full' +
+              (form().get('amount')?.invalid && form().get('amount')?.touched ? ' input-error' : '')
+            "
             placeholder="100"
+            ariaLabel="Template amount"
           />
+          <p id="template-amount-help" class="text-base-content/60 text-xs">
+            Use the keypad for whole or decimal amounts.
+          </p>
         </div>
         <div class="flex flex-col gap-1 flex-1">
           <label class="label label-text text-xs" for="unit">Unit</label>
@@ -47,16 +57,28 @@
         </div>
         <div class="flex flex-col gap-1 flex-1">
           <label class="label label-text text-xs" for="kcal_amount">kcal</label>
-          <input
-            id="kcal_amount"
-            type="number"
+          <app-custom-keypad-input
+            inputId="kcal_amount"
             formControlName="kcal_amount"
-            class="input input-sm w-full"
-            [class.input-error]="
-              form().get('kcal_amount')?.invalid && form().get('kcal_amount')?.touched
+            [keypadRows]="integerKeypadRows"
+            [inputConstraint]="'integer'"
+            [inputMode]="'numeric'"
+            [describedBy]="'template-kcal-help'"
+            [invalid]="!!(form().get('kcal_amount')?.invalid && form().get('kcal_amount')?.touched)"
+            [inputClass]="
+              'input input-sm w-full' +
+              (form().get('kcal_amount')?.invalid && form().get('kcal_amount')?.touched
+                ? ' input-error'
+                : '')
             "
-            min="1"
           />
+          @if (form().get('kcal_amount')?.touched && form().get('kcal_amount')?.hasError('min')) {
+            <p id="template-kcal-help" class="text-error text-xs">Enter a value above 0.</p>
+          } @else {
+            <p id="template-kcal-help" class="text-base-content/60 text-xs">
+              Use the keypad for whole-number calories.
+            </p>
+          }
         </div>
       </div>
 

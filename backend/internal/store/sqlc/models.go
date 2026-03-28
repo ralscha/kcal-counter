@@ -10,9 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	"kcal-counter/internal/store/dbtype"
-
 	"github.com/google/uuid"
+	"kcal-counter/internal/store/dbtype"
 )
 
 type KcalTemplateKind string

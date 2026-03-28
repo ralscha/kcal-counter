@@ -12,23 +12,40 @@
           <app-theme-toggle />
         </div>
 
-        <label class="flex flex-col gap-2">
-          <span class="text-sm font-medium text-base-content">Daily kcal limit</span>
-          <input
-            type="number"
-            min="1"
-            inputmode="numeric"
-            class="input input-bordered w-full"
-            placeholder="2200"
+        <div class="flex flex-col gap-2">
+          <label class="text-sm font-medium text-base-content" for="profile-kcal-limit">
+            Daily kcal limit
+          </label>
+          <app-custom-keypad-input
+            inputId="profile-kcal-limit"
             formControlName="kcalLimit"
+            [keypadRows]="integerKeypadRows"
+            [inputConstraint]="'integer'"
+            [inputMode]="'numeric'"
+            [describedBy]="'profile-kcal-limit-help'"
+            [invalid]="!!(form.controls.kcalLimit.invalid && form.controls.kcalLimit.touched)"
+            [inputClass]="
+              'input input-bordered w-full' +
+              (form.controls.kcalLimit.invalid && form.controls.kcalLimit.touched
+                ? ' input-error'
+                : '')
+            "
+            placeholder="2200"
+            ariaLabel="Daily kcal limit"
           />
           <span class="text-xs text-base-content/60">
             Leave blank if you do not want a local target.
           </span>
           @if (form.controls.kcalLimit.touched && form.controls.kcalLimit.hasError('min')) {
-            <span class="text-xs text-error">Enter a value above 0.</span>
+            <span id="profile-kcal-limit-help" class="text-xs text-error"
+              >Enter a value above 0.</span
+            >
+          } @else {
+            <span id="profile-kcal-limit-help" class="text-xs text-base-content/60">
+              Use the keypad for whole-number limits.
+            </span>
           }
-        </label>
+        </div>
 
         <label class="flex flex-col gap-2">
           <span class="text-sm font-medium text-base-content">Cycle start date</span>

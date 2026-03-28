@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { ReactiveFormsModule, FormGroup } from '@angular/forms';
+import { CustomKeypadInputComponent } from '../../../shared/components/custom-keypad-input/custom-keypad-input';
 
 @Component({
   selector: 'app-history-entry-form',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, CustomKeypadInputComponent],
   templateUrl: './history-entry-form.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

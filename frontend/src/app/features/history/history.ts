@@ -14,6 +14,10 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { KcalEntry } from '../../core/models/kcal.model';
 import { SyncService } from '../../core/services/sync.service';
 import { generateUuid } from '../../shared/utils/uuid';
+import {
+  kcalExpressionValidator,
+  parseArithmeticExpression,
+} from '../../shared/utils/arithmetic-expression';
 import { HistoryDayDetailsComponent } from './components/history-day-details';
 import { HistoryDayListComponent } from './components/history-day-list';
 import { HistoryDeleteModalComponent } from './components/history-delete-modal';
@@ -127,8 +131,10 @@ export class HistoryComponent {
   readonly #reviewEntryId = signal<string | null>(null);
   readonly #handledReviewEntryId = signal<string | null>(null);
 
-  protected form = this.#fb.nonNullable.group({
-    kcal_delta: [0, [Validators.required]],
+  protected form = this.#fb.group({
+    kcal_delta: this.#fb.control<number | string | null>(0, {
+      validators: [Validators.required, kcalExpressionValidator],
+    }),
   });
 
   protected readonly weekLabel = computed(() => {
@@ -269,10 +275,17 @@ export class HistoryComponent {
 
     try {
       const { kcal_delta } = this.form.getRawValue();
+      const parsedKcal = parseArithmeticExpression(kcal_delta);
+      if (parsedKcal == null) {
+        this.form.get('kcal_delta')?.markAsTouched();
+        return;
+      }
+
+      this.form.patchValue({ kcal_delta: parsedKcal });
       const editing = this.editingEntry();
       const entry: KcalEntry = {
         id: editing?.id ?? generateUuid(),
-        kcal_delta,
+        kcal_delta: parsedKcal,
         happened_at:
           editing?.happened_at ??
           buildEntryTimestamp(dateKey, this.entriesForDate(dateKey), this.#todayKey),

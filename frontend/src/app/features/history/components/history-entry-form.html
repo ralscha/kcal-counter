@@ -6,13 +6,32 @@
   <form [formGroup]="form()" (ngSubmit)="submit()" class="flex flex-col gap-3">
     <div>
       <label class="label label-text text-xs" for="history-kcal-{{ dateKey() }}">kcal</label>
-      <input
-        id="history-kcal-{{ dateKey() }}"
-        type="number"
+      <app-custom-keypad-input
+        [inputId]="'history-kcal-' + dateKey()"
         formControlName="kcal_delta"
-        class="input input-sm w-full"
-        [class.input-error]="form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched"
+        [inputConstraint]="'expression'"
+        placeholder="e.g. 3*50"
+        [describedBy]="'history-kcal-help-' + dateKey()"
+        [invalid]="!!(form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched)"
+        [inputClass]="
+          'input input-sm w-full' +
+          (form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched
+            ? ' input-error'
+            : '')
+        "
       />
+
+      @if (
+        form().get('kcal_delta')?.hasError('kcalExpression') && form().get('kcal_delta')?.touched
+      ) {
+        <p [id]="'history-kcal-help-' + dateKey()" class="mt-1 text-error text-xs">
+          Enter a number or a calculation using +, -, * or /.
+        </p>
+      } @else {
+        <p [id]="'history-kcal-help-' + dateKey()" class="mt-1 text-base-content/60 text-xs">
+          Use the keypad or type an expression like 3*50. Invalid operator sequences are filtered.
+        </p>
+      }
     </div>
 
     <div class="flex gap-2 justify-end">

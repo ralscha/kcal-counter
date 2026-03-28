@@ -12,6 +12,7 @@ export class DashboardTemplatePickerModalComponent {
   readonly searchQuery = input('');
   readonly templates = input.required<KcalTemplateItem[]>();
 
+  readonly backRequested = output<void>();
   readonly cancelRequested = output<void>();
   readonly manualEntryRequested = output<void>();
   readonly templateSelected = output<KcalTemplateItem>();

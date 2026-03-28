@@ -2,7 +2,11 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildBatchSyncRequest, dedupeQueuedMutations } from './sync-push.util';
+import {
+  buildBatchSyncRequest,
+  dedupeQueuedMutations,
+  normalizeTemplateAmount,
+} from './sync-push.util';
 
 describe('sync-push.util', () => {
   it('builds a batched sync request from queued changes', () => {
@@ -14,7 +18,7 @@ describe('sync-push.util', () => {
           id: 'template-1',
           kind: 'food',
           name: 'rice',
-          amount: ' 100 ',
+          amount: ' 0100.000 ',
           unit: 'g',
           kcal_amount: 130,
           deleted: false,
@@ -91,5 +95,11 @@ describe('sync-push.util', () => {
 
     expect(deduped).toHaveLength(1);
     expect(deduped[0]?.payload).toMatchObject({ kcal_delta: 150 });
+  });
+
+  it('normalizes template amount strings without forcing trailing zeros', () => {
+    expect(normalizeTemplateAmount('10')).toBe('10');
+    expect(normalizeTemplateAmount('10.500')).toBe('10.5');
+    expect(normalizeTemplateAmount('0010.000')).toBe('10');
   });
 });

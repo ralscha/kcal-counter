@@ -12,6 +12,10 @@ import {
   ProfilePreferencesService,
   type ProfilePreferences,
 } from '../../core/services/profile-preferences.service';
+import {
+  CustomKeypadInputComponent,
+  INTEGER_KEYPAD_ROWS,
+} from '../../shared/components/custom-keypad-input/custom-keypad-input';
 import { ToastService } from '../../core/services/toast.service';
 import { ThemeToggleComponent } from '../../shared/components/theme-toggle/theme-toggle';
 
@@ -25,11 +29,12 @@ function localDateToday(): string {
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, ThemeToggleComponent],
+  imports: [ReactiveFormsModule, ThemeToggleComponent, CustomKeypadInputComponent],
   templateUrl: './profile.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfilePageComponent {
+  protected readonly integerKeypadRows = INTEGER_KEYPAD_ROWS;
   protected readonly preferencesService = inject(ProfilePreferencesService);
   readonly #toastService = inject(ToastService);
 

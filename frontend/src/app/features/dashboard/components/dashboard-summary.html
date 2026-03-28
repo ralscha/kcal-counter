@@ -81,6 +81,33 @@
         </button>
       </div>
 
+      @if (recentEntries().length) {
+        <section class="mt-6 w-full max-w-xs text-left" aria-label="Latest entries from today">
+          <p
+            class="mb-2 text-center text-xs font-semibold uppercase tracking-[0.2em] text-base-content/60"
+          >
+            Latest today
+          </p>
+
+          <ul class="space-y-2">
+            @for (entry of recentEntries(); track entry.id) {
+              <li class="flex items-center justify-between rounded-2xl bg-base-200/70 px-4 py-3">
+                <span class="text-sm font-medium text-base-content">
+                  {{ formatTime(entry.happened_at) }}
+                </span>
+                <span
+                  class="text-sm font-semibold tabular-nums"
+                  [class.text-success]="entry.kcal_delta > 0"
+                  [class.text-warning]="entry.kcal_delta < 0"
+                >
+                  {{ entry.kcal_delta > 0 ? '+' : '' }}{{ entry.kcal_delta }} kcal
+                </span>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
       <a class="link link-primary mt-4 text-sm" [routerLink]="['/history']"> View in history </a>
     </div>
   </div>
