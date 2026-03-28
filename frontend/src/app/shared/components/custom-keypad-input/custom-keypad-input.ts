@@ -60,7 +60,6 @@ export class CustomKeypadInputComponent implements ControlValueAccessor {
   readonly inputClass = input('input input-sm w-full');
   readonly valueInput = input<string | number | null | undefined>(undefined);
   readonly inputConstraint = input<InputConstraint>('none');
-  readonly inputMode = input('none');
   readonly type = input('text');
   readonly autocomplete = input('off');
   readonly ariaLabel = input<string | null>(null);

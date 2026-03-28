@@ -7,7 +7,7 @@
     [value]="value()"
     [placeholder]="placeholder()"
     [disabled]="isDisabled()"
-    [attr.inputmode]="inputMode()"
+    inputmode="none"
     [attr.autocomplete]="autocomplete()"
     [attr.aria-invalid]="invalid()"
     [attr.aria-describedby]="describedBy()"
@@ -15,6 +15,8 @@
     [attr.aria-haspopup]="'dialog'"
     [attr.aria-expanded]="keypadOpen()"
     [attr.aria-controls]="inputId() + '-keypad'"
+    readonly
+    virtualkeyboardpolicy="manual"
     autocapitalize="off"
     autocorrect="off"
     spellcheck="false"
