@@ -186,11 +186,6 @@ func (h AuthHandler) completeLogin(ctx context.Context, principal auth.SessionPr
 }
 
 func clientIP(r *http.Request) string {
-	forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0])
-	if forwarded != "" {
-		return forwarded
-	}
-
 	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
 	if err == nil {
 		return host

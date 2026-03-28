@@ -60,11 +60,6 @@ func RateLimitByIP(limiter limiter, keyPrefix string, logger *slog.Logger) func(
 }
 
 func clientIP(r *http.Request) string {
-	forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0])
-	if forwarded != "" {
-		return forwarded
-	}
-
 	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
 	if err == nil {
 		return host
