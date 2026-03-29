@@ -210,7 +210,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as unknown as Pick<HttpClient, 'post'>,
+      http: http as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -315,7 +315,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as unknown as Pick<HttpClient, 'post'>,
+      http: http as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -385,7 +385,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as unknown as Pick<HttpClient, 'post'>,
+      http: http as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -447,7 +447,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as unknown as Pick<HttpClient, 'post'>,
+      http: http as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });

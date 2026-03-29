@@ -15,7 +15,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { SyncService } from '../../core/services/sync.service';
 import { KcalTemplateItem, KcalTemplateKind } from '../../core/models/kcal.model';
 import { generateUuid } from '../../shared/utils/uuid';
-import { normalizeTemplateKcalAmount } from '../../core/services/sync-push.util';
 import { TemplatesDeleteModalComponent } from './components/templates-delete-modal';
 import { TemplatesFormComponent } from './components/templates-form';
 import { TemplatesKindTabsComponent } from './components/templates-kind-tabs';
@@ -155,7 +154,7 @@ export class TemplatesComponent {
         name,
         amount: String(amount).trim(),
         unit,
-        kcal_amount: normalizeTemplateKcalAmount(kcal_amount),
+        kcal_amount,
       };
       this.#sync.upsertTemplate(item);
       this.showForm.set(false);
