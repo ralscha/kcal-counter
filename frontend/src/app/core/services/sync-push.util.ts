@@ -41,11 +41,21 @@ export function normalizeTemplateAmount(value: string | number): string {
   return fractionPart ? `${integerPart}.${fractionPart}` : integerPart;
 }
 
+export function normalizeTemplateKcalAmount(value: number | string): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  const normalized = Number.parseInt(value.trim(), 10);
+  return Number.isNaN(normalized) ? 0 : normalized;
+}
+
 export function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
   if (change.entity_table === 'kcal_template_items') {
     return {
       ...change,
       amount: normalizeTemplateAmount(change.amount),
+      kcal_amount: normalizeTemplateKcalAmount(change.kcal_amount),
     };
   }
 
