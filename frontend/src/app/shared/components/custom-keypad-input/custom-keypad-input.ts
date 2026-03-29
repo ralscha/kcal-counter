@@ -14,23 +14,23 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 type InputConstraint = 'none' | 'integer' | 'decimal' | 'expression';
 
 export const INTEGER_KEYPAD_ROWS = [
-  ['7', '8', '9'],
-  ['4', '5', '6'],
   ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
   ['0', '00'],
 ] as const satisfies readonly (readonly string[])[];
 
 export const DECIMAL_KEYPAD_ROWS = [
-  ['7', '8', '9'],
-  ['4', '5', '6'],
   ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
   ['0', '.'],
 ] as const satisfies readonly (readonly string[])[];
 
 export const EXPRESSION_KEYPAD_ROWS = [
-  ['7', '8', '9', '/'],
-  ['4', '5', '6', '*'],
   ['1', '2', '3', '-'],
+  ['4', '5', '6', '*'],
+  ['7', '8', '9', '/'],
   ['0', '.', '+'],
 ] as const satisfies readonly (readonly string[])[];
 
@@ -235,7 +235,7 @@ export class CustomKeypadInputComponent implements ControlValueAccessor {
   }
 
   protected handleHostFocusOut(): void {
-    queueMicrotask(() => {
+    setTimeout(() => {
       if (this.#host.nativeElement.contains(document.activeElement)) {
         return;
       }
@@ -243,7 +243,7 @@ export class CustomKeypadInputComponent implements ControlValueAccessor {
       this.stopBackspaceRepeat();
       this.keypadOpen.set(false);
       this.#onTouched();
-    });
+    }, 0);
   }
 
   private syncValue(value: string): void {
