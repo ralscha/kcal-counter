@@ -1,13 +1,19 @@
+import { DOCUMENT } from '@angular/common';
 import { Injectable, inject, signal } from '@angular/core';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { ToastService } from './toast.service';
 
+const ACTIVITY_CHECK_DEBOUNCE_MS = 1_000;
+
 @Injectable({ providedIn: 'root' })
 export class AppUpdateService {
+  readonly #document = inject(DOCUMENT);
   readonly #swUpdate = inject(SwUpdate);
   readonly #toastService = inject(ToastService);
   readonly #updateAvailable = signal(false);
   readonly #isActivating = signal(false);
+  #isCheckingForUpdate = false;
+  #lastCheckStartedAt = 0;
 
   readonly updateAvailable = this.#updateAvailable.asReadonly();
   readonly isActivating = this.#isActivating.asReadonly();
@@ -20,6 +26,9 @@ export class AppUpdateService {
     this.#swUpdate.versionUpdates.subscribe((event) => {
       this.#handleVersionEvent(event);
     });
+
+    this.#registerActivityListeners();
+    void this.checkForUpdate();
   }
 
   async activateUpdate(): Promise<void> {
@@ -43,6 +52,23 @@ export class AppUpdateService {
     }
   }
 
+  async checkForUpdate(): Promise<void> {
+    if (!this.#canCheckForUpdates()) {
+      return;
+    }
+
+    this.#isCheckingForUpdate = true;
+    this.#lastCheckStartedAt = Date.now();
+
+    try {
+      await this.#swUpdate.checkForUpdate();
+    } catch (error) {
+      console.error('Failed to check for app updates.', error);
+    } finally {
+      this.#isCheckingForUpdate = false;
+    }
+  }
+
   #handleVersionEvent(event: VersionEvent): void {
     switch (event.type) {
       case 'VERSION_DETECTED':
@@ -63,5 +89,46 @@ export class AppUpdateService {
         console.info('No new app version detected');
         break;
     }
+  }
+
+  #registerActivityListeners(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    this.#document.addEventListener('visibilitychange', this.#handleVisibilityChange);
+    window.addEventListener('pageshow', this.#handleAppBecameActive);
+  }
+
+  readonly #handleVisibilityChange = (): void => {
+    if (this.#document.visibilityState !== 'visible') {
+      return;
+    }
+
+    void this.checkForUpdate();
+  };
+
+  readonly #handleAppBecameActive = (): void => {
+    void this.checkForUpdate();
+  };
+
+  #canCheckForUpdates(): boolean {
+    if (!this.#swUpdate.isEnabled || this.#isActivating() || this.#updateAvailable()) {
+      return false;
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return false;
+    }
+
+    if (this.#document.visibilityState === 'hidden') {
+      return false;
+    }
+
+    if (this.#isCheckingForUpdate) {
+      return false;
+    }
+
+    return Date.now() - this.#lastCheckStartedAt >= ACTIVITY_CHECK_DEBOUNCE_MS;
   }
 }

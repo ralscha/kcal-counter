@@ -53,9 +53,9 @@ export class TemplatesComponent {
 
   protected form = this.#fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(100)]],
-    amount: ['100', Validators.required],
+    amount: ['', Validators.required],
     unit: ['g', Validators.required],
-    kcal_amount: [100, [Validators.required, Validators.min(1)]],
+    kcal_amount: ['', [Validators.required, Validators.min(1)]],
   });
 
   protected readonly items = computed(() =>
@@ -109,7 +109,7 @@ export class TemplatesComponent {
 
   protected openAdd(): void {
     this.editingItem.set(null);
-    this.form.reset({ name: '', amount: '100', unit: 'g', kcal_amount: 100 });
+    this.form.reset({ name: '', amount: '100', unit: 'g', kcal_amount: '' });
     this.formError.set('');
     this.showForm.set(true);
   }
@@ -120,7 +120,7 @@ export class TemplatesComponent {
       name: item.name,
       amount: item.amount,
       unit: item.unit,
-      kcal_amount: item.kcal_amount,
+      kcal_amount: String(item.kcal_amount),
     });
     this.formError.set('');
     this.showForm.set(true);
