@@ -22,7 +22,7 @@
     spellcheck="false"
     (focus)="registerInput(field); openKeypad()"
     (input)="handleInput($event)"
-    (keydown.enter)="handleEnter($event)"
+    (keydown)="handleKeydown($event)"
     (pointerup)="stopBackspaceRepeat()"
   />
 
@@ -85,7 +85,7 @@
         </div>
 
         <p class="px-1 text-center text-[11px] text-base-content/60">
-          Press Enter to close. Hold Backspace to delete faster.
+          Type with your keyboard, press Enter to close, or hold Backspace to delete faster.
         </p>
       </div>
     </div>

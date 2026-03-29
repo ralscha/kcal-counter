@@ -13,6 +13,17 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 
 type InputConstraint = 'none' | 'integer' | 'decimal' | 'expression';
 
+const KEYBOARD_INPUT_KEYS = new Set(['.', ',', '+', '-', '*', '/']);
+const NAVIGATION_KEYS = new Set([
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'Tab',
+]);
+
 export const INTEGER_KEYPAD_ROWS = [
   ['1', '2', '3'],
   ['4', '5', '6'],
@@ -144,6 +155,51 @@ export class CustomKeypadInputComponent implements ControlValueAccessor {
     this.closeKeypad();
   }
 
+  protected handleKeydown(event: KeyboardEvent): void {
+    if (this.isDisabled()) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    if (NAVIGATION_KEYS.has(event.key)) {
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      this.handleEnter(event);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeKeypad();
+      return;
+    }
+
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      this.backspace();
+      return;
+    }
+
+    if (event.key === 'Delete') {
+      event.preventDefault();
+      this.deleteForward();
+      return;
+    }
+
+    const fragment = this.normalizeKeyboardFragment(event.key);
+    if (fragment == null) {
+      return;
+    }
+
+    event.preventDefault();
+    this.insertText(fragment);
+  }
+
   protected insertText(fragment: string): void {
     if (this.isDisabled()) {
       return;
@@ -180,6 +236,26 @@ export class CustomKeypadInputComponent implements ControlValueAccessor {
 
     this.syncValue(nextValue);
     this.focusInput(Math.max(0, deleteStart));
+  }
+
+  protected deleteForward(): void {
+    if (this.isDisabled()) {
+      return;
+    }
+
+    const input = this.#inputElement;
+    const currentValue = this.value();
+    const start = input?.selectionStart ?? currentValue.length;
+    const end = input?.selectionEnd ?? currentValue.length;
+    if (start === currentValue.length && end === currentValue.length) {
+      return;
+    }
+
+    const deleteEnd = start === end ? Math.min(currentValue.length, end + 1) : end;
+    const nextValue = `${currentValue.slice(0, start)}${currentValue.slice(deleteEnd)}`;
+
+    this.syncValue(nextValue);
+    this.focusInput(start);
   }
 
   protected handleBackspaceClick(): void {
@@ -260,6 +336,14 @@ export class CustomKeypadInputComponent implements ControlValueAccessor {
 
     input.focus();
     input.setSelectionRange(caret, caret);
+  }
+
+  private normalizeKeyboardFragment(key: string): string | null {
+    if ((key >= '0' && key <= '9') || KEYBOARD_INPUT_KEYS.has(key)) {
+      return key;
+    }
+
+    return null;
   }
 
   private sanitizeValue(value: string): string {
