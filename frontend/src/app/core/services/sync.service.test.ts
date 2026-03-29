@@ -400,6 +400,68 @@ describe('SyncService', () => {
     expect(request.changes[0]).toMatchObject({ id: 'entry-fractional', kcal_delta: 98 });
   });
 
+  it('writes template kcal_amount as a number when local input passes a string', async () => {
+    const db = new FakeDbService();
+    const storage = new FakeStorageService();
+
+    storage.set('device_id', 'device-template-kcal');
+
+    const http = {
+      post: () =>
+        of({
+          data: {
+            reset_required: false,
+            last_sync_seq: 1,
+            min_valid_seq: 0,
+            push_results: [
+              {
+                applied: true,
+                record: {
+                  entity_table: 'kcal_template_items',
+                  id: 'template-string-kcal',
+                  kind: 'food',
+                  name: 'banana',
+                  amount: '1',
+                  unit: 'piece',
+                  kcal_amount: 90,
+                  deleted: false,
+                  client_updated_at: '2026-03-29T08:00:00Z',
+                  global_version: 1,
+                  server_updated_at: '2026-03-29T08:00:01Z',
+                },
+              },
+            ],
+            pull_changes: [],
+          },
+        } satisfies KcalSyncResponse),
+    };
+
+    const service = createService({
+      http: http as Pick<HttpClient, 'post'>,
+      storage: storage as unknown as StorageService,
+      db: db as unknown as DbService,
+    });
+
+    service.upsertTemplate({
+      id: 'template-string-kcal',
+      kind: 'food',
+      name: 'banana',
+      amount: '1',
+      unit: 'piece',
+      kcal_amount: '90' as unknown as number,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const storedTemplates = await db.templates.toArray();
+    expect(storedTemplates).toHaveLength(1);
+    expect(storedTemplates[0]).toMatchObject({
+      id: 'template-string-kcal',
+      kcal_amount: 90,
+    });
+    expect(typeof (storedTemplates[0] as { kcal_amount: unknown }).kcal_amount).toBe('number');
+  });
+
   it('builds a notice for discarded offline changes', async () => {
     const db = new FakeDbService();
     const storage = new FakeStorageService();

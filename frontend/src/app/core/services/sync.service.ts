@@ -18,6 +18,7 @@ import {
   normalizeEntry,
   normalizeSyncChange,
   normalizeTemplateAmount,
+  normalizeTemplateKcalAmount,
   queuedMutationKey,
   type QueuedSyncMutation,
 } from './sync-push.util';
@@ -33,6 +34,7 @@ function normalizeTemplateItem(item: KcalTemplateItem): KcalTemplateItem {
   return {
     ...item,
     amount: normalizeTemplateAmount(item.amount),
+    kcal_amount: normalizeTemplateKcalAmount(item.kcal_amount),
   };
 }
 

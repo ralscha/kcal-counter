@@ -6,6 +6,7 @@ import {
   buildBatchSyncRequest,
   dedupeQueuedMutations,
   normalizeTemplateAmount,
+  normalizeTemplateKcalAmount,
 } from './sync-push.util';
 
 describe('sync-push.util', () => {
@@ -101,5 +102,11 @@ describe('sync-push.util', () => {
     expect(normalizeTemplateAmount('10')).toBe('10');
     expect(normalizeTemplateAmount('10.500')).toBe('10.5');
     expect(normalizeTemplateAmount('0010.000')).toBe('10');
+  });
+
+  it('normalizes template kcal strings into numbers', () => {
+    expect(normalizeTemplateKcalAmount('90')).toBe(90);
+    expect(normalizeTemplateKcalAmount('097.5')).toBe(98);
+    expect(normalizeTemplateKcalAmount(130)).toBe(130);
   });
 });
