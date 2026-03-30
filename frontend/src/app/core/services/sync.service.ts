@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -29,6 +30,7 @@ const LAST_SYNC_SEQ_KEY = 'last_sync_seq';
 const SYNC_SNAPSHOT_RECORD_ID = 'pull_snapshot';
 const SYNC_RETRY_BASE_MS = 1_000;
 const SYNC_RETRY_MAX_MS = 30_000;
+const FOREGROUND_SYNC_DEBOUNCE_MS = 1_000;
 
 function normalizeTemplateItem(item: KcalTemplateItem): KcalTemplateItem {
   return {
@@ -58,6 +60,7 @@ interface SyncNoticeDetail {
 
 @Injectable({ providedIn: 'root' })
 export class SyncService {
+  readonly #document = inject(DOCUMENT);
   readonly #http = inject(HttpClient);
   readonly #storage = inject(StorageService);
   readonly #db = inject(DbService);
@@ -72,10 +75,13 @@ export class SyncService {
   #syncPendingRequested = false;
   #syncRetryDelayMs = 0;
   #syncRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  #lastForegroundSyncRequestedAt = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => this.#requestSyncPending(0));
+      this.#document.addEventListener('visibilitychange', this.#handleVisibilityChange);
+      window.addEventListener('pageshow', this.#handleAppBecameActive);
     }
   }
 
@@ -151,6 +157,28 @@ export class SyncService {
       this.#syncRetryTimer = null;
       void this.#syncPending(true, true);
     }, delayMs);
+  }
+
+  readonly #handleVisibilityChange = (): void => {
+    if (this.#document.visibilityState !== 'visible') {
+      return;
+    }
+
+    this.#requestForegroundSync();
+  };
+
+  readonly #handleAppBecameActive = (): void => {
+    this.#requestForegroundSync();
+  };
+
+  #requestForegroundSync(): void {
+    const now = Date.now();
+    if (now - this.#lastForegroundSyncRequestedAt < FOREGROUND_SYNC_DEBOUNCE_MS) {
+      return;
+    }
+
+    this.#lastForegroundSyncRequestedAt = now;
+    this.#requestSyncPending(0);
   }
 
   #nextRetryDelay(): number {

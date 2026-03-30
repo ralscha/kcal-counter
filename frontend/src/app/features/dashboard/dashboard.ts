@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SyncService } from '../../core/services/sync.service';
@@ -78,6 +79,8 @@ function toIsoFromLocalDateAndTime(dateKey: string, time: string): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardComponent {
+  readonly #document = inject(DOCUMENT);
+  readonly #destroyRef = inject(DestroyRef);
   readonly #fb = inject(FormBuilder);
   readonly #sync = inject(SyncService);
   readonly #preferences = inject(ProfilePreferencesService);
@@ -201,6 +204,10 @@ export class DashboardComponent {
     const cycleStartDate = this.#preferences.preferences().cycleStartDate;
     return !!cycleStartDate && cycleStartDate <= this.selectedDate();
   });
+
+  constructor() {
+    this.#registerActivityListeners();
+  }
 
   protected openAdd(kind: KcalTemplateKind): void {
     this.editingEntry.set(null);
@@ -392,5 +399,40 @@ export class DashboardComponent {
     }
 
     return parsed;
+  }
+
+  #registerActivityListeners(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    this.#document.addEventListener('visibilitychange', this.#handleVisibilityChange);
+    window.addEventListener('pageshow', this.#handleAppBecameActive);
+
+    this.#destroyRef.onDestroy(() => {
+      this.#document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
+      window.removeEventListener('pageshow', this.#handleAppBecameActive);
+    });
+  }
+
+  readonly #handleVisibilityChange = (): void => {
+    if (this.#document.visibilityState !== 'visible') {
+      return;
+    }
+
+    this.#syncSelectedDateToToday();
+  };
+
+  readonly #handleAppBecameActive = (): void => {
+    this.#syncSelectedDateToToday();
+  };
+
+  #syncSelectedDateToToday(): void {
+    const today = localDateToday();
+    if (this.selectedDate() === today) {
+      return;
+    }
+
+    this.selectedDate.set(today);
   }
 }
