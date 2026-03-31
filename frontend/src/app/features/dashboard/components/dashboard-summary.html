@@ -1,0 +1,114 @@
+<div class="flex flex-col items-center gap-5 mb-6 mt-2">
+  <div class="w-full text-center text-base text-lg font-medium tracking-wide">
+    {{ selectedDateLabel() }}
+  </div>
+
+  <div class="flex items-center justify-center w-full mt-4">
+    <div class="flex flex-col items-center text-center min-w-0">
+      @if (dailyLimitDifference(); as difference) {
+        <div
+          class="rounded-full px-5 py-2 text-3xl md:text-4xl font-semibold leading-none tabular-nums"
+          [class.bg-success]="difference < 0"
+          [class.text-success-content]="difference < 0"
+          [class.bg-error]="difference > 0"
+          [class.text-error-content]="difference > 0"
+          [class.bg-base-300]="difference === 0"
+        >
+          {{ formatSignedKcal(difference) }} kcal
+        </div>
+        <div>Difference to daily limit</div>
+      }
+
+      @if (cycleDifference(); as difference) {
+        <div
+          class="mt-10 rounded-full px-4 py-2 text-2xl md:text-3xl font-medium leading-none tabular-nums"
+          [class.bg-success]="difference < 0"
+          [class.text-success-content]="difference < 0"
+          [class.bg-error]="difference > 0"
+          [class.text-error-content]="difference > 0"
+          [class.bg-base-300]="difference === 0"
+        >
+          {{ formatSignedKcal(difference) }} kcal
+        </div>
+      }
+
+      @if (cycleStartDateLabel(); as label) {
+        <div>Since cycle start: {{ label }}</div>
+      }
+
+      <div class="mt-20 flex items-center justify-center gap-4">
+        <button
+          class="btn btn-circle btn-outline btn-lg h-14 w-14 min-h-14"
+          type="button"
+          title="Add activity"
+          (click)="addActivity.emit()"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+          </svg>
+        </button>
+
+        <div class="text-4xl md:text-5xl font-bold leading-none tabular-nums">
+          {{ totalKcal() > 0 ? '+' : '' }}{{ totalKcal() }} kcal
+        </div>
+
+        <button
+          class="btn btn-circle btn-primary btn-lg h-14 w-14 min-h-14"
+          type="button"
+          title="Add food"
+          (click)="addFood.emit()"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+        </button>
+      </div>
+
+      @if (recentEntries().length) {
+        <section class="mt-6 w-full max-w-xs text-left" aria-label="Latest entries from today">
+          <p
+            class="mb-2 text-center text-xs font-semibold uppercase tracking-[0.2em] text-base-content/60"
+          >
+            Latest today
+          </p>
+
+          <ul class="space-y-2">
+            @for (entry of recentEntries(); track entry.id) {
+              <li class="flex items-center justify-between rounded-2xl bg-base-200/70 px-4 py-3">
+                <span class="text-sm font-medium text-base-content">
+                  {{ formatTime(entry.happened_at) }}
+                </span>
+                <span
+                  class="text-sm font-semibold tabular-nums"
+                  [class.text-success]="entry.kcal_delta > 0"
+                  [class.text-warning]="entry.kcal_delta < 0"
+                >
+                  {{ entry.kcal_delta > 0 ? '+' : '' }}{{ entry.kcal_delta }} kcal
+                </span>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      <a class="link link-primary mt-4 text-sm" [routerLink]="['/history']"> View in history </a>
+    </div>
+  </div>
+</div>

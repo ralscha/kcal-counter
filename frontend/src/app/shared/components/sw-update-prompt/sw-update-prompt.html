@@ -1,0 +1,27 @@
+@if (appUpdate.updateAvailable()) {
+  <div
+    class="modal modal-open"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="app-update-title"
+    aria-describedby="app-update-description"
+  >
+    <div class="modal-box">
+      <h2 id="app-update-title" class="text-lg font-semibold">Update available</h2>
+      <p id="app-update-description" class="py-3 text-sm text-base-content/70">
+        A new version of kcal-counter is ready. Reload the app to apply the update.
+      </p>
+      <div class="modal-action">
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="appUpdate.activateUpdate()"
+          [disabled]="appUpdate.isActivating()"
+        >
+          {{ appUpdate.isActivating() ? 'Updating...' : 'Reload now' }}
+        </button>
+      </div>
+    </div>
+    <div class="modal-backdrop" aria-hidden="true"></div>
+  </div>
+}

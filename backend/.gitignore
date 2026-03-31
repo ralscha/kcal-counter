@@ -1,0 +1,15 @@
+.env
+.env.local
+.local/.env
+bin/
+coverage.out
+coverage.raw.out
+coverage.html
+dist/
+tmp/
+vendor/
+*.log
+*.tmp
+*.test
+coverage
+.vscode/

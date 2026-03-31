@@ -1,0 +1,20 @@
+[Unit]
+Description=Kcal Counter backend service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kcal-counter
+Group=kcal-counter
+WorkingDirectory=/opt/kcal-counter/backend
+ExecStart=/opt/kcal-counter/backend/bin/app
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

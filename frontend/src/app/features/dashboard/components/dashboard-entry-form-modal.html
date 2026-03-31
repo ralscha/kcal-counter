@@ -1,0 +1,105 @@
+<div class="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="dashboard-add-title">
+  <div class="modal-box max-w-lg">
+    <div class="mb-4">
+      <h2 id="dashboard-add-title" class="text-lg font-semibold">{{ title() }}</h2>
+    </div>
+
+    @if (error()) {
+      <div class="alert alert-error text-sm py-2 mb-3">{{ error() }}</div>
+    }
+
+    @if (!editing()) {
+      <button
+        type="button"
+        class="mb-4 flex w-full items-center justify-between gap-3 rounded-box bg-base-200 px-4 py-3 text-left transition-colors hover:bg-base-300"
+        (click)="backRequested.emit()"
+      >
+        <span class="min-w-0 flex-1">
+          <span class="text-xs font-semibold uppercase tracking-[0.16em] opacity-60"
+            >Selected template</span
+          >
+          <span class="mt-1 block text-sm font-medium">{{ selectedTemplateLabel() }}</span>
+        </span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4 shrink-0 opacity-60"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+    }
+
+    <form [formGroup]="form()" (ngSubmit)="submit()" class="flex flex-col gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row">
+        @if (hasSelectedTemplate()) {
+          <div class="flex flex-col gap-1 flex-1">
+            <label class="label label-text text-sm" for="template_amount">
+              {{ templateAmountLabel() }}
+            </label>
+            <app-custom-keypad-input
+              inputId="template_amount"
+              [valueInput]="templateAmountInput()"
+              [keypadRows]="decimalKeypadRows"
+              [inputConstraint]="'decimal'"
+              [placeholder]="templateAmountPlaceholder()"
+              [ariaLabel]="templateAmountLabel()"
+              [inputClass]="'input input-sm w-full'"
+              (valueInputChange)="templateAmountChanged.emit($event)"
+            />
+          </div>
+        }
+
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-sm" for="kcal_delta">kcal</label>
+          <app-custom-keypad-input
+            inputId="kcal_delta"
+            formControlName="kcal_delta"
+            [keypadRows]="expressionKeypadRows"
+            [inputConstraint]="'expression'"
+            placeholder="e.g. 3*50"
+            [describedBy]="'dashboard-kcal-help'"
+            [invalid]="!!(form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched)"
+            [inputClass]="
+              'input input-sm w-full' +
+              (form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched
+                ? ' input-error'
+                : '')
+            "
+          />
+        </div>
+
+        <div class="flex flex-col gap-1 sm:w-40">
+          <label class="label label-text text-sm" for="happened_at">Time</label>
+          <input
+            id="happened_at"
+            type="time"
+            formControlName="happened_at"
+            class="input input-sm w-full"
+          />
+        </div>
+      </div>
+
+      <div class="modal-action mt-2">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="cancelRequested.emit()">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm" [disabled]="loading()">
+          @if (loading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ editing() ? 'Save' : 'Add' }}
+        </button>
+      </div>
+    </form>
+  </div>
+  <button
+    type="button"
+    class="modal-backdrop"
+    aria-label="Close add entry dialog"
+    (click)="cancelRequested.emit()"
+  ></button>
+</div>

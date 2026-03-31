@@ -1,0 +1,49 @@
+<div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+  @if (saveError()) {
+    <div class="alert alert-error mb-3 py-2 text-sm">{{ saveError() }}</div>
+  }
+
+  <form [formGroup]="form()" (ngSubmit)="submit()" class="flex flex-col gap-3">
+    <div>
+      <label class="label label-text text-xs" for="history-kcal-{{ dateKey() }}">kcal</label>
+      <app-custom-keypad-input
+        [inputId]="'history-kcal-' + dateKey()"
+        formControlName="kcal_delta"
+        [inputConstraint]="'expression'"
+        placeholder="e.g. 3*50"
+        [describedBy]="'history-kcal-help-' + dateKey()"
+        [invalid]="!!(form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched)"
+        [inputClass]="
+          'input input-sm w-full' +
+          (form().get('kcal_delta')?.invalid && form().get('kcal_delta')?.touched
+            ? ' input-error'
+            : '')
+        "
+      />
+
+      @if (
+        form().get('kcal_delta')?.hasError('kcalExpression') && form().get('kcal_delta')?.touched
+      ) {
+        <p [id]="'history-kcal-help-' + dateKey()" class="mt-1 text-error text-xs">
+          Enter a number or a calculation using +, -, * or /.
+        </p>
+      } @else {
+        <p [id]="'history-kcal-help-' + dateKey()" class="mt-1 text-base-content/60 text-xs">
+          Use the keypad or type an expression like 3*50. Invalid operator sequences are filtered.
+        </p>
+      }
+    </div>
+
+    <div class="flex gap-2 justify-end">
+      <button type="button" class="btn btn-ghost btn-sm" (click)="cancelRequested.emit()">
+        Cancel
+      </button>
+      <button type="submit" class="btn btn-primary btn-sm" [disabled]="saveLoading()">
+        @if (saveLoading()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ editing() ? 'Save' : 'Add' }}
+      </button>
+    </div>
+  </form>
+</div>

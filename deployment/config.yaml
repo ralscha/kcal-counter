@@ -1,0 +1,44 @@
+app:
+  env: production
+  log_level: warn
+
+http:
+  address: "127.0.0.1:54382"
+  read_timeout: 15s
+  read_header_timeout: 10s
+  write_timeout: 30s
+  idle_timeout: 60s
+  shutdown_timeout: 20s
+
+database:
+  url: postgres://kcal_counter_user:REPLACE_WITH_DB_PASSWORD@127.0.0.1:56781/kcal_counter?sslmode=disable
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 5m
+  conn_max_idle_time: 2m
+
+session:
+  cookie_name: kcal_counter_session
+  lifetime: 168h
+  idle_timeout: 168h
+  same_site: lax
+  secure: true
+  http_only: true
+  persist: true
+
+security:
+  authorization_cache_ttl: 5s
+  failed_login_threshold: 5
+  failed_login_window: 15m
+  inactivity_disable_after: 8760h
+
+webauthn:
+  rp_id: kcal.rasc.ch
+  rp_display_name: Kcal Counter
+  rp_origins:
+    - https://kcal.rasc.ch
+
+scheduler:
+  enabled: false
+  cleanup_every: 1h
+  inactivity_check_every: 24h

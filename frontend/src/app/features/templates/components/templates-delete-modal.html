@@ -1,0 +1,19 @@
+<div class="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+  <div class="modal-box">
+    <h3 id="delete-title" class="text-lg font-semibold">Delete list item?</h3>
+    <p class="py-3 text-sm text-base-content/70">
+      Remove <span class="font-medium text-base-content">{{ item().name }}</span> from your
+      {{ item().kind }} list.
+    </p>
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="cancelRequested.emit()">Cancel</button>
+      <button type="button" class="btn btn-error" (click)="confirmRequested.emit()">Delete</button>
+    </div>
+  </div>
+  <button
+    type="button"
+    class="modal-backdrop"
+    aria-label="Close delete confirmation"
+    (click)="cancelRequested.emit()"
+  ></button>
+</div>

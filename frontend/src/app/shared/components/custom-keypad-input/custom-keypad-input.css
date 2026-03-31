@@ -1,0 +1,18 @@
+:host {
+  display: block;
+}
+
+.keypad-panel {
+  touch-action: manipulation;
+}
+
+.keypad-row {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.keypad-key,
+.keypad-action {
+  min-height: 2.75rem;
+  font-variant-numeric: tabular-nums;
+}

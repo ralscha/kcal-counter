@@ -1,0 +1,22 @@
+<div role="tablist" class="tabs tabs-border">
+  <button
+    role="tab"
+    type="button"
+    class="tab tab-border"
+    [class.tab-active]="activeKind() === 'food'"
+    [attr.aria-selected]="activeKind() === 'food'"
+    (click)="selectKind.emit('food')"
+  >
+    Food
+  </button>
+  <button
+    role="tab"
+    type="button"
+    class="tab tab-border"
+    [class.tab-active]="activeKind() === 'activity'"
+    [attr.aria-selected]="activeKind() === 'activity'"
+    (click)="selectKind.emit('activity')"
+  >
+    Activity
+  </button>
+</div>

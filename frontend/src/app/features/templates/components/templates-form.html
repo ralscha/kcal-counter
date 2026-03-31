@@ -1,0 +1,96 @@
+<div class="card border border-base-300 bg-base-100 shadow-sm">
+  <div class="card-body p-4 gap-3">
+    <h2 class="font-semibold text-sm text-base-content">
+      {{ editingItem() ? 'Edit list item' : 'New list item' }}
+      <span class="text-base-content/50">· {{ activeKind() }}</span>
+    </h2>
+
+    @if (formError()) {
+      <div class="alert alert-error text-sm py-2">{{ formError() }}</div>
+    }
+
+    <form [formGroup]="form()" (ngSubmit)="saveRequested.emit()" class="flex flex-col gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="label label-text text-xs" for="name">Name</label>
+        <input
+          id="name"
+          type="text"
+          formControlName="name"
+          class="input input-sm w-full"
+          [class.input-error]="form().get('name')?.invalid && form().get('name')?.touched"
+          placeholder="e.g. Rice"
+        />
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-3">
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-xs" for="amount">Amount</label>
+          <app-custom-keypad-input
+            inputId="amount"
+            formControlName="amount"
+            [keypadRows]="decimalKeypadRows"
+            [inputConstraint]="'decimal'"
+            [describedBy]="'template-amount-help'"
+            [invalid]="!!(form().get('amount')?.invalid && form().get('amount')?.touched)"
+            [inputClass]="
+              'input input-sm w-full' +
+              (form().get('amount')?.invalid && form().get('amount')?.touched ? ' input-error' : '')
+            "
+            placeholder="100"
+            ariaLabel="Template amount"
+          />
+          <p id="template-amount-help" class="text-base-content/60 text-xs">
+            Use the keypad for whole or decimal amounts.
+          </p>
+        </div>
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-xs" for="unit">Unit</label>
+          <input
+            id="unit"
+            type="text"
+            formControlName="unit"
+            class="input input-sm w-full"
+            [class.input-error]="form().get('unit')?.invalid && form().get('unit')?.touched"
+            placeholder="g"
+          />
+        </div>
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="label label-text text-xs" for="kcal_amount">kcal</label>
+          <app-custom-keypad-input
+            inputId="kcal_amount"
+            formControlName="kcal_amount"
+            [keypadRows]="integerKeypadRows"
+            [inputConstraint]="'integer'"
+            [describedBy]="'template-kcal-help'"
+            [invalid]="!!(form().get('kcal_amount')?.invalid && form().get('kcal_amount')?.touched)"
+            [inputClass]="
+              'input input-sm w-full' +
+              (form().get('kcal_amount')?.invalid && form().get('kcal_amount')?.touched
+                ? ' input-error'
+                : '')
+            "
+          />
+          @if (form().get('kcal_amount')?.touched && form().get('kcal_amount')?.hasError('min')) {
+            <p id="template-kcal-help" class="text-error text-xs">Enter a value above 0.</p>
+          } @else {
+            <p id="template-kcal-help" class="text-base-content/60 text-xs">
+              Use the keypad for whole-number calories.
+            </p>
+          }
+        </div>
+      </div>
+
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="cancelRequested.emit()">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm" [disabled]="formLoading()">
+          @if (formLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ editingItem() ? 'Save' : 'Add' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

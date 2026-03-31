@@ -1,0 +1,46 @@
+<div class="p-4 md:p-6 max-w-2xl mx-auto">
+  @if (!showAddForm() && !showTemplatePicker()) {
+    <app-dashboard-summary
+      [selectedDateLabel]="selectedDateLabel()"
+      [dailyLimitDifference]="dailyLimitDifference()"
+      [cycleDifference]="cycleDifference()"
+      [cycleStartDateLabel]="cycleStartDateLabel()"
+      [recentEntries]="recentEntries()"
+      [totalKcal]="totalKcal()"
+      (addActivity)="openAdd('activity')"
+      (addFood)="openAdd('food')"
+    />
+  }
+
+  @if (showTemplatePicker()) {
+    <app-dashboard-template-picker-modal
+      [title]="templatePickerTitle()"
+      [searchQuery]="templateSearchQuery()"
+      [templates]="filteredTemplates()"
+      (backRequested)="backToAddForm()"
+      (cancelRequested)="cancelAdd()"
+      (manualEntryRequested)="openManualEntry()"
+      (templateSelected)="chooseTemplate($event)"
+      (searchQueryChanged)="onTemplateSearchInput($event)"
+    />
+  }
+
+  @if (showAddForm()) {
+    <app-dashboard-entry-form-modal
+      [title]="addDialogTitle()"
+      [form]="form"
+      [error]="addError()"
+      [editing]="!!editingEntry()"
+      [hasSelectedTemplate]="hasSelectedTemplate()"
+      [templateAmountInput]="templateAmountInput()"
+      [templateAmountLabel]="templateAmountLabel()"
+      [templateAmountPlaceholder]="templateAmountPlaceholder()"
+      [selectedTemplateLabel]="selectedTemplateLabel()"
+      [loading]="addLoading()"
+      (backRequested)="backToTemplatePicker()"
+      (cancelRequested)="cancelAdd()"
+      (saveRequested)="saveEntry()"
+      (templateAmountChanged)="onTemplateAmountInput($event)"
+    />
+  }
+</div>

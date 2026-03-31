@@ -1,0 +1,93 @@
+<div class="flex flex-col gap-2">
+  <input
+    #field
+    [id]="inputId()"
+    [type]="type()"
+    [class]="inputClass()"
+    [value]="value()"
+    [placeholder]="placeholder()"
+    [disabled]="isDisabled()"
+    inputmode="none"
+    [attr.autocomplete]="autocomplete()"
+    [attr.aria-invalid]="invalid()"
+    [attr.aria-describedby]="describedBy()"
+    [attr.aria-label]="ariaLabel()"
+    [attr.aria-haspopup]="'dialog'"
+    [attr.aria-expanded]="keypadOpen()"
+    [attr.aria-controls]="inputId() + '-keypad'"
+    readonly
+    virtualkeyboardpolicy="manual"
+    autocapitalize="off"
+    autocorrect="off"
+    spellcheck="false"
+    (focus)="registerInput(field); openKeypad()"
+    (input)="handleInput($event)"
+    (keydown)="handleKeydown($event)"
+    (pointerup)="stopBackspaceRepeat()"
+  />
+
+  @if (keypadOpen()) {
+    <div
+      class="keypad-panel rounded-box border border-base-300 bg-base-200/90 p-2 shadow-sm"
+      [id]="inputId() + '-keypad'"
+      role="group"
+      [attr.aria-label]="(ariaLabel() ?? 'Custom keypad') + ' keypad'"
+    >
+      <div class="flex flex-col gap-2">
+        @for (row of keypadRows(); track $index) {
+          <div
+            class="keypad-row"
+            [style.grid-template-columns]="'repeat(' + row.length + ', minmax(0, 1fr))'"
+          >
+            @for (key of row; track key + '-' + $index) {
+              <button
+                type="button"
+                class="keypad-key btn btn-sm btn-outline"
+                [disabled]="isDisabled()"
+                (click)="insertText(key)"
+              >
+                {{ key }}
+              </button>
+            }
+          </div>
+        }
+
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            class="keypad-action btn btn-sm btn-ghost"
+            [disabled]="isDisabled()"
+            (click)="clear()"
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            class="keypad-action btn btn-sm btn-ghost"
+            [disabled]="isDisabled()"
+            (click)="handleBackspaceClick()"
+            (pointerdown)="startBackspaceRepeat($event)"
+            (pointerup)="stopBackspaceRepeat()"
+            (pointercancel)="stopBackspaceRepeat()"
+            (pointerleave)="stopBackspaceRepeat()"
+            title="Hold to delete faster"
+          >
+            Backspace
+          </button>
+          <button
+            type="button"
+            class="keypad-action btn btn-sm btn-primary"
+            [disabled]="isDisabled()"
+            (click)="closeKeypad()"
+          >
+            Done
+          </button>
+        </div>
+
+        <p class="px-1 text-center text-[11px] text-base-content/60">
+          Type with your keyboard, press Enter to close, or hold Backspace to delete faster.
+        </p>
+      </div>
+    </div>
+  }
+</div>
