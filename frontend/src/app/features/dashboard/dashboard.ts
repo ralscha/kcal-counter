@@ -10,6 +10,7 @@ import {
   kcalExpressionValidator,
   parseArithmeticExpression,
 } from '../../shared/utils/arithmetic-expression';
+import { normalizeDashboardEntryKcal } from './dashboard-kcal';
 import { DashboardEntryFormModalComponent } from './components/dashboard-entry-form-modal';
 import { DashboardSummaryComponent } from './components/dashboard-summary';
 import { DashboardTemplatePickerModalComponent } from './components/dashboard-template-picker-modal';
@@ -259,7 +260,7 @@ export class DashboardComponent {
 
     const calculatedKcal = Math.round((template.kcal_amount / templateAmount) * enteredAmount);
     this.form.patchValue({
-      kcal_delta: template.kind === 'food' ? calculatedKcal : -calculatedKcal,
+      kcal_delta: normalizeDashboardEntryKcal(template.kind, false, calculatedKcal),
     });
   }
 
@@ -309,13 +310,19 @@ export class DashboardComponent {
         return;
       }
 
-      this.form.patchValue({ kcal_delta: parsedKcal });
+      const normalizedKcal = normalizeDashboardEntryKcal(
+        this.addTemplateKind(),
+        !!this.editingEntry(),
+        parsedKcal,
+      );
+
+      this.form.patchValue({ kcal_delta: normalizedKcal });
 
       const editing = this.editingEntry();
       const dateKey = editing ? toLocalDateKey(editing.happened_at) : localDateToday();
       const entry: KcalEntry = {
         id: editing?.id ?? generateUuid(),
-        kcal_delta: parsedKcal,
+        kcal_delta: normalizedKcal,
         happened_at: toIsoFromLocalDateAndTime(dateKey, happened_at),
       };
       this.#sync.upsertEntry(entry);
@@ -375,11 +382,7 @@ export class DashboardComponent {
     this.selectedAddTemplate.set(template);
     this.templateAmountInput.set('');
     this.form.reset({
-      kcal_delta: template
-        ? template.kind === 'food'
-          ? template.kcal_amount
-          : -template.kcal_amount
-        : null,
+      kcal_delta: template ? normalizeDashboardEntryKcal(template.kind, false, template.kcal_amount) : null,
       happened_at: localTimeDefault(),
     });
     this.addError.set('');
