@@ -1,5 +1,12 @@
 import { DOCUMENT } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SyncService } from '../../core/services/sync.service';
@@ -382,7 +389,9 @@ export class DashboardComponent {
     this.selectedAddTemplate.set(template);
     this.templateAmountInput.set('');
     this.form.reset({
-      kcal_delta: template ? normalizeDashboardEntryKcal(template.kind, false, template.kcal_amount) : null,
+      kcal_delta: template
+        ? normalizeDashboardEntryKcal(template.kind, false, template.kcal_amount)
+        : null,
       happened_at: localTimeDefault(),
     });
     this.addError.set('');
