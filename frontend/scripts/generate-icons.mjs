@@ -14,7 +14,11 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, '..', 'public');
 const ICONS_DIR = join(PUBLIC_DIR, 'icons');
-const SOURCE_IMAGE_CANDIDATES = ['source_icon.png', 'Image_tfo5fttfo5fttfo5.png'];
+const SOURCE_IMAGE_CANDIDATES = [
+  'source_icon.png',
+  'Image_tfo5fttfo5fttfo5.png',
+  'public/icons/icon-512x512.png',
+];
 
 // PWA icon sizes required by the manifest
 const PWA_SIZES = [72, 96, 128, 144, 152, 192, 384, 512];
@@ -32,13 +36,9 @@ function resolveSourceImage() {
   );
 }
 
-async function buildSquareImage(sourceImage, size) {
+async function createTrimmedBaseBuffer(sourceImage) {
+  // First, extract raw pixels from the source image to perform background removal
   return sharp(sourceImage)
-    .resize(size, size, {
-      fit: 'contain',
-      position: 'center',
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true })
@@ -107,6 +107,8 @@ async function buildSquareImage(sourceImage, size) {
         }
       }
 
+      // Reconstruct the image with the transparent background and then TRIM it.
+      // Trimming removes all the excess transparency, leaving only the tight bounds of the logo.
       return sharp(Buffer.from(rgba), {
         raw: {
           width,
@@ -115,8 +117,33 @@ async function buildSquareImage(sourceImage, size) {
         },
       })
         .png()
+        .trim()
         .toBuffer();
     });
+}
+
+async function buildSquareImage(baseBuffer, size, marginRatio = 0.05) {
+  // We use a small symmetric padding (e.g. 5%) so it's not totally flush against the bounds.
+  // This helps it look proportionate in taskbars/home screens without being tiny.
+  const padding = Math.round(size * marginRatio);
+  const innerSize = size - padding * 2;
+
+  // Handle case where size is very small, padding might be 0
+  return sharp(baseBuffer)
+    .resize(innerSize > 0 ? innerSize : size, innerSize > 0 ? innerSize : size, {
+      fit: 'contain',
+      position: 'center',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .extend({
+      top: padding,
+      bottom: padding,
+      left: padding,
+      right: padding,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
 }
 
 async function main() {
@@ -125,34 +152,48 @@ async function main() {
   }
 
   const sourceImage = resolveSourceImage();
+  console.log(`Using source image: ${sourceImage}`);
+
+  // Extract the cleanly cropped, transparent icon base
+  const trimmedBaseBuffer = await createTrimmedBaseBuffer(sourceImage);
 
   // --- PWA PNG icons --------------------------------------------------------
   for (const size of PWA_SIZES) {
     const outPath = join(ICONS_DIR, `icon-${size}x${size}.png`);
-    await writeFileSync(outPath, await buildSquareImage(sourceImage, size));
+    // Pass 8% margin for PWA / maskable so no edges touch
+    await writeFileSync(outPath, await buildSquareImage(trimmedBaseBuffer, size, 0.08));
     console.log(`  ✓ icons/icon-${size}x${size}.png`);
   }
 
   // --- Apple Touch Icon (iOS home screen) -----------------------------------
   const atPath = join(ICONS_DIR, 'apple-touch-icon.png');
-  writeFileSync(atPath, await buildSquareImage(sourceImage, 180));
+  writeFileSync(atPath, await buildSquareImage(trimmedBaseBuffer, 180, 0.08));
   console.log('  ✓ icons/apple-touch-icon.png');
 
   // --- In-app brand mark ----------------------------------------------------
-  writeFileSync(join(PUBLIC_DIR, 'brand-mark.png'), await buildSquareImage(sourceImage, 96));
+  writeFileSync(
+    join(PUBLIC_DIR, 'brand-mark.png'),
+    await buildSquareImage(trimmedBaseBuffer, 96, 0.0),
+  );
   console.log('  ✓ brand-mark.png');
 
   // --- Standard favicon PNGs ------------------------------------------------
-  writeFileSync(join(PUBLIC_DIR, 'favicon-32x32.png'), await buildSquareImage(sourceImage, 32));
+  writeFileSync(
+    join(PUBLIC_DIR, 'favicon-32x32.png'),
+    await buildSquareImage(trimmedBaseBuffer, 32, 0.0),
+  );
   console.log('  ✓ favicon-32x32.png');
 
-  writeFileSync(join(PUBLIC_DIR, 'favicon-16x16.png'), await buildSquareImage(sourceImage, 16));
+  writeFileSync(
+    join(PUBLIC_DIR, 'favicon-16x16.png'),
+    await buildSquareImage(trimmedBaseBuffer, 16, 0.0),
+  );
   console.log('  ✓ favicon-16x16.png');
 
   // --- favicon.ico (16 + 32 px embedded PNG) --------------------------------
   const [png16, png32] = await Promise.all([
-    buildSquareImage(sourceImage, 16),
-    buildSquareImage(sourceImage, 32),
+    buildSquareImage(trimmedBaseBuffer, 16, 0.0),
+    buildSquareImage(trimmedBaseBuffer, 32, 0.0),
   ]);
   const icoBuffer = await pngToIco([png16, png32]);
   writeFileSync(join(PUBLIC_DIR, 'favicon.ico'), icoBuffer);

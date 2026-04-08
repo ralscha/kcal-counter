@@ -3,7 +3,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { ToastService } from './toast.service';
 
-const ACTIVITY_CHECK_DEBOUNCE_MS = 1_000;
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const LAST_UPDATE_CHECK_KEY = 'kcal_last_update_check_time';
 
 @Injectable({ providedIn: 'root' })
 export class AppUpdateService {
@@ -13,7 +14,6 @@ export class AppUpdateService {
   readonly #updateAvailable = signal(false);
   readonly #isActivating = signal(false);
   #isCheckingForUpdate = false;
-  #lastCheckStartedAt = 0;
 
   readonly updateAvailable = this.#updateAvailable.asReadonly();
   readonly isActivating = this.#isActivating.asReadonly();
@@ -58,7 +58,14 @@ export class AppUpdateService {
     }
 
     this.#isCheckingForUpdate = true;
-    this.#lastCheckStartedAt = Date.now();
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LAST_UPDATE_CHECK_KEY, Date.now().toString());
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
 
     try {
       await this.#swUpdate.checkForUpdate();
@@ -129,6 +136,20 @@ export class AppUpdateService {
       return false;
     }
 
-    return Date.now() - this.#lastCheckStartedAt >= ACTIVITY_CHECK_DEBOUNCE_MS;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const lastCheckStr = localStorage.getItem(LAST_UPDATE_CHECK_KEY);
+        if (lastCheckStr) {
+          const lastCheck = parseInt(lastCheckStr, 10);
+          if (!isNaN(lastCheck) && Date.now() - lastCheck < UPDATE_CHECK_INTERVAL_MS) {
+            return false;
+          }
+        }
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+
+    return true;
   }
 }
