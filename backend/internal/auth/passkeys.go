@@ -353,13 +353,25 @@ func (s *Service) updatePasskeyCredential(ctx context.Context, credential *wa.Cr
 }
 
 func credentialFromRow(row sqlc.PasskeyCredential) wa.Credential {
+	credential := credentialFromColumns(row)
 	if len(row.CredentialData) > 0 && string(row.CredentialData) != "{}" {
-		var credential wa.Credential
-		if err := json.Unmarshal(row.CredentialData, &credential); err == nil {
+		var stored wa.Credential
+		if err := json.Unmarshal(row.CredentialData, &stored); err == nil {
+			credential = stored
+			if credential.AttestationType == "" {
+				credential.AttestationType = attestationTypeFromCredentialData(row.CredentialData)
+			}
+			if credential.AttestationType == "" {
+				credential.AttestationType = row.AttestationType
+			}
 			return credential
 		}
 	}
 
+	return credential
+}
+
+func credentialFromColumns(row sqlc.PasskeyCredential) wa.Credential {
 	credential := wa.Credential{
 		ID:              row.CredentialID,
 		PublicKey:       row.CredentialPublicKey,
@@ -379,4 +391,14 @@ func credentialFromRow(row sqlc.PasskeyCredential) wa.Credential {
 	}
 
 	return credential
+}
+
+func attestationTypeFromCredentialData(data []byte) string {
+	var stored struct {
+		AttestationType string `json:"attestationType"`
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return ""
+	}
+	return stored.AttestationType
 }

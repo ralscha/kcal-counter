@@ -17,6 +17,7 @@ type fakeStore struct {
 	templates         map[uuid.UUID]sqlc.KcalTemplateItem
 	entries           map[uuid.UUID]sqlc.KcalEntry
 	upsertCursorCalls []sqlc.UpsertDeviceSyncStateParams
+	syncLockCalls     int
 	minValidVersion   int64
 	globalVersion     int64
 	listTemplateItems []sqlc.KcalTemplateItem
@@ -33,6 +34,11 @@ func newFakeStore() *fakeStore {
 
 func (f *fakeStore) WithTx(_ context.Context, fn func(Store) error) error {
 	return fn(f)
+}
+
+func (f *fakeStore) AcquireSyncLock(context.Context, int64) error {
+	f.syncLockCalls++
+	return nil
 }
 
 func (f *fakeStore) BumpMinValidVersion(_ context.Context, arg sqlc.BumpMinValidVersionParams) error {

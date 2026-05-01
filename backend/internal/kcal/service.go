@@ -17,11 +17,13 @@ const (
 	EntityTableTemplateItems = "kcal_template_items"
 	EntityTableEntries       = "kcal_entries"
 	tombstoneRetention       = 30 * 24 * time.Hour
+	syncTransactionLockKey   = 0x4b43414c0001
 )
 
 var ErrInvalidTemplateKind = errors.New("invalid template kind")
 
 type Store interface {
+	AcquireSyncLock(context.Context, int64) error
 	BumpMinValidVersion(context.Context, sqlc.BumpMinValidVersionParams) error
 	CreateKcalEntry(context.Context, sqlc.CreateKcalEntryParams) (sqlc.KcalEntry, error)
 	CreateKcalTemplateItem(context.Context, sqlc.CreateKcalTemplateItemParams) (sqlc.KcalTemplateItem, error)
@@ -146,11 +148,25 @@ func (w *storeWrapper) WithTx(ctx context.Context, fn func(Store) error) error {
 	return tx.Commit()
 }
 
+func (w *storeWrapper) AcquireSyncLock(ctx context.Context, _ int64) error {
+	_, err := w.db.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", syncTransactionLockKey)
+	return err
+}
+
 func NewStore(db sqlc.DBTX) Store {
 	return &storeWrapper{
 		Queries: sqlc.New(db),
 		db:      db,
 	}
+}
+
+func (s *Service) withSyncWriteLock(ctx context.Context, userID int64, fn func(Store) error) error {
+	return s.store.WithTx(ctx, func(txStore Store) error {
+		if err := txStore.AcquireSyncLock(ctx, userID); err != nil {
+			return err
+		}
+		return fn(txStore)
+	})
 }
 
 func (s *Service) ListTemplateItems(ctx context.Context, userID int64, kind string) ([]TemplateItem, error) {
@@ -194,7 +210,13 @@ func (s *Service) CreateTemplateItem(ctx context.Context, userID int64, input Te
 		itemID = *input.ID
 	}
 	now := time.Now().UTC()
-	item, err := s.createTemplateItem(ctx, userID, itemID, input, now, now, sql.NullTime{})
+	var item sqlc.KcalTemplateItem
+	err := s.withSyncWriteLock(ctx, userID, func(txStore Store) error {
+		var err error
+		txService := Service{store: txStore}
+		item, err = txService.createTemplateItem(ctx, userID, itemID, input, now, now, sql.NullTime{})
+		return err
+	})
 	if err != nil {
 		return TemplateItem{}, err
 	}
@@ -202,16 +224,21 @@ func (s *Service) CreateTemplateItem(ctx context.Context, userID int64, input Te
 }
 
 func (s *Service) UpdateTemplateItem(ctx context.Context, userID int64, itemID uuid.UUID, input TemplateItemInput) (TemplateItem, error) {
-	current, err := s.store.GetKcalTemplateItemByID(ctx, sqlc.GetKcalTemplateItemByIDParams{ID: itemID, UserID: userID})
-	if err != nil {
-		return TemplateItem{}, err
-	}
-	if current.DeletedAt.Valid {
-		return TemplateItem{}, sql.ErrNoRows
-	}
-
 	now := time.Now().UTC()
-	item, err := s.updateTemplateItem(ctx, userID, itemID, input, now, now, sql.NullTime{})
+	var item sqlc.KcalTemplateItem
+	err := s.withSyncWriteLock(ctx, userID, func(txStore Store) error {
+		current, err := txStore.GetKcalTemplateItemByID(ctx, sqlc.GetKcalTemplateItemByIDParams{ID: itemID, UserID: userID})
+		if err != nil {
+			return err
+		}
+		if current.DeletedAt.Valid {
+			return sql.ErrNoRows
+		}
+
+		txService := Service{store: txStore}
+		item, err = txService.updateTemplateItem(ctx, userID, itemID, input, now, now, sql.NullTime{})
+		return err
+	})
 	if err != nil {
 		return TemplateItem{}, err
 	}
@@ -219,22 +246,24 @@ func (s *Service) UpdateTemplateItem(ctx context.Context, userID int64, itemID u
 }
 
 func (s *Service) DeleteTemplateItem(ctx context.Context, userID int64, itemID uuid.UUID) error {
-	current, err := s.store.GetKcalTemplateItemByID(ctx, sqlc.GetKcalTemplateItemByIDParams{ID: itemID, UserID: userID})
-	if err != nil {
-		return err
-	}
-	if current.DeletedAt.Valid {
-		return sql.ErrNoRows
-	}
-
 	now := time.Now().UTC()
-	_, err = s.store.DeleteKcalTemplateItem(ctx, sqlc.DeleteKcalTemplateItemParams{
-		ID:              itemID,
-		UserID:          userID,
-		ClientUpdatedAt: now,
-		ServerUpdatedAt: now,
+	return s.withSyncWriteLock(ctx, userID, func(txStore Store) error {
+		current, err := txStore.GetKcalTemplateItemByID(ctx, sqlc.GetKcalTemplateItemByIDParams{ID: itemID, UserID: userID})
+		if err != nil {
+			return err
+		}
+		if current.DeletedAt.Valid {
+			return sql.ErrNoRows
+		}
+
+		_, err = txStore.DeleteKcalTemplateItem(ctx, sqlc.DeleteKcalTemplateItemParams{
+			ID:              itemID,
+			UserID:          userID,
+			ClientUpdatedAt: now,
+			ServerUpdatedAt: now,
+		})
+		return err
 	})
-	return err
 }
 
 func (s *Service) CreateEntry(ctx context.Context, userID int64, input EntryInput) (Entry, error) {
@@ -243,7 +272,13 @@ func (s *Service) CreateEntry(ctx context.Context, userID int64, input EntryInpu
 		entryID = *input.ID
 	}
 	now := time.Now().UTC()
-	entry, err := s.createEntry(ctx, userID, entryID, input, now, now, sql.NullTime{})
+	var entry sqlc.KcalEntry
+	err := s.withSyncWriteLock(ctx, userID, func(txStore Store) error {
+		var err error
+		txService := Service{store: txStore}
+		entry, err = txService.createEntry(ctx, userID, entryID, input, now, now, sql.NullTime{})
+		return err
+	})
 	if err != nil {
 		return Entry{}, err
 	}
@@ -251,16 +286,21 @@ func (s *Service) CreateEntry(ctx context.Context, userID int64, input EntryInpu
 }
 
 func (s *Service) UpdateEntry(ctx context.Context, userID int64, entryID uuid.UUID, input EntryInput) (Entry, error) {
-	current, err := s.store.GetKcalEntryByID(ctx, sqlc.GetKcalEntryByIDParams{ID: entryID, UserID: userID})
-	if err != nil {
-		return Entry{}, err
-	}
-	if current.DeletedAt.Valid {
-		return Entry{}, sql.ErrNoRows
-	}
-
 	now := time.Now().UTC()
-	entry, err := s.updateEntry(ctx, userID, entryID, input, now, now, sql.NullTime{})
+	var entry sqlc.KcalEntry
+	err := s.withSyncWriteLock(ctx, userID, func(txStore Store) error {
+		current, err := txStore.GetKcalEntryByID(ctx, sqlc.GetKcalEntryByIDParams{ID: entryID, UserID: userID})
+		if err != nil {
+			return err
+		}
+		if current.DeletedAt.Valid {
+			return sql.ErrNoRows
+		}
+
+		txService := Service{store: txStore}
+		entry, err = txService.updateEntry(ctx, userID, entryID, input, now, now, sql.NullTime{})
+		return err
+	})
 	if err != nil {
 		return Entry{}, err
 	}
@@ -268,22 +308,24 @@ func (s *Service) UpdateEntry(ctx context.Context, userID int64, entryID uuid.UU
 }
 
 func (s *Service) DeleteEntry(ctx context.Context, userID int64, entryID uuid.UUID) error {
-	current, err := s.store.GetKcalEntryByID(ctx, sqlc.GetKcalEntryByIDParams{ID: entryID, UserID: userID})
-	if err != nil {
-		return err
-	}
-	if current.DeletedAt.Valid {
-		return sql.ErrNoRows
-	}
-
 	now := time.Now().UTC()
-	_, err = s.store.DeleteKcalEntry(ctx, sqlc.DeleteKcalEntryParams{
-		ID:              entryID,
-		UserID:          userID,
-		ClientUpdatedAt: now,
-		ServerUpdatedAt: now,
+	return s.withSyncWriteLock(ctx, userID, func(txStore Store) error {
+		current, err := txStore.GetKcalEntryByID(ctx, sqlc.GetKcalEntryByIDParams{ID: entryID, UserID: userID})
+		if err != nil {
+			return err
+		}
+		if current.DeletedAt.Valid {
+			return sql.ErrNoRows
+		}
+
+		_, err = txStore.DeleteKcalEntry(ctx, sqlc.DeleteKcalEntryParams{
+			ID:              entryID,
+			UserID:          userID,
+			ClientUpdatedAt: now,
+			ServerUpdatedAt: now,
+		})
+		return err
 	})
-	return err
 }
 
 func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (SyncResult, error) {
@@ -293,6 +335,10 @@ func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (Sync
 
 	var result SyncResult
 	err := s.store.WithTx(ctx, func(txStore Store) error {
+		if err := txStore.AcquireSyncLock(ctx, userID); err != nil {
+			return err
+		}
+
 		if err := txStore.EnsureSyncMetadataRow(ctx, userID); err != nil {
 			return err
 		}

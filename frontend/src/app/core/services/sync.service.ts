@@ -301,45 +301,95 @@ export class SyncService {
     ]);
   }
 
-  async #replaceLocalState(changes: KcalSyncChange[]): Promise<void> {
-    const templates = changes
-      .filter(
-        (change): change is Extract<KcalSyncChange, { entity_table: 'kcal_template_items' }> =>
-          change.entity_table === 'kcal_template_items' && !change.deleted,
-      )
-      .map((change) =>
-        normalizeTemplateItem({
+  async #replaceLocalState(
+    changes: KcalSyncChange[],
+    pendingMutations: QueuedSyncMutation[] = [],
+  ): Promise<void> {
+    const templates = new Map(
+      changes
+        .filter(
+          (change): change is Extract<KcalSyncChange, { entity_table: 'kcal_template_items' }> =>
+            change.entity_table === 'kcal_template_items' && !change.deleted,
+        )
+        .map(
+          (change) =>
+            [
+              change.id,
+              normalizeTemplateItem({
+                id: change.id,
+                kind: change.kind,
+                name: change.name,
+                amount: change.amount,
+                unit: change.unit,
+                kcal_amount: change.kcal_amount,
+              }),
+            ] as const,
+        ),
+    );
+    const entries = new Map(
+      changes
+        .filter(
+          (change): change is Extract<KcalSyncChange, { entity_table: 'kcal_entries' }> =>
+            change.entity_table === 'kcal_entries' && !change.deleted,
+        )
+        .map(
+          (change) =>
+            [
+              change.id,
+              {
+                id: change.id,
+                kcal_delta: change.kcal_delta,
+                happened_at: change.happened_at,
+              },
+            ] as const,
+        ),
+    );
+
+    const pending = dedupeQueuedMutations(pendingMutations);
+    for (const mutation of pending) {
+      const change = normalizeSyncChange(mutation.payload);
+      if (change.entity_table === 'kcal_template_items') {
+        if (change.deleted) {
+          templates.delete(change.id);
+        } else {
+          templates.set(
+            change.id,
+            normalizeTemplateItem({
+              id: change.id,
+              kind: change.kind,
+              name: change.name,
+              amount: change.amount,
+              unit: change.unit,
+              kcal_amount: change.kcal_amount,
+            }),
+          );
+        }
+      } else if (change.deleted) {
+        entries.delete(change.id);
+      } else {
+        entries.set(change.id, {
           id: change.id,
-          kind: change.kind,
-          name: change.name,
-          amount: change.amount,
-          unit: change.unit,
-          kcal_amount: change.kcal_amount,
-        }),
-      );
-    const entries = changes
-      .filter(
-        (change): change is Extract<KcalSyncChange, { entity_table: 'kcal_entries' }> =>
-          change.entity_table === 'kcal_entries' && !change.deleted,
-      )
-      .map((change) => ({
-        id: change.id,
-        kcal_delta: change.kcal_delta,
-        happened_at: change.happened_at,
-      }));
+          kcal_delta: change.kcal_delta,
+          happened_at: change.happened_at,
+        });
+      }
+    }
+
+    const templateList = [...templates.values()];
+    const entryList = [...entries.values()];
 
     await this.#db.templates.clear();
     await this.#db.entries.clear();
-    await this.#db.pendingMutations.clear();
-    if (templates.length) {
-      await this.#db.templates.bulkPut(templates);
+    await this.#replacePendingMutations(pending);
+    if (templateList.length) {
+      await this.#db.templates.bulkPut(templateList);
     }
-    if (entries.length) {
-      await this.#db.entries.bulkPut(entries);
+    if (entryList.length) {
+      await this.#db.entries.bulkPut(entryList);
     }
 
-    this.templates.set(templates);
-    this.entries.set(entries);
+    this.templates.set(templateList);
+    this.entries.set(entryList);
   }
 
   #describeQueuedMutation(mutation: QueuedSyncMutation): string {
@@ -429,7 +479,10 @@ export class SyncService {
 
       const response = await this.#postSyncRequest(pending);
       if (response.data.reset_required) {
-        await this.#replaceLocalState(response.data.pull_changes);
+        await this.#replaceLocalState(
+          response.data.pull_changes,
+          await this.#loadPendingMutations(),
+        );
         this.#saveLastSyncSeq(response.data.last_sync_seq);
         await this.#db.syncState.put({ id: SYNC_SNAPSHOT_RECORD_ID });
         this.#syncRetryDelayMs = 0;

@@ -1,6 +1,7 @@
 /// <reference types="bun-types" />
 
 import '@angular/compiler';
+import { DOCUMENT } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { describe, expect, it } from 'bun:test';
@@ -145,8 +146,13 @@ function createService(options: {
   storage: StorageService;
   db: DbService;
 }): SyncService {
+  const document = {
+    visibilityState: 'visible',
+    addEventListener: () => undefined,
+  };
   const injector = Injector.create({
     providers: [
+      { provide: DOCUMENT, useValue: document },
       { provide: HttpClient, useValue: options.http },
       { provide: StorageService, useValue: options.storage },
       { provide: DbService, useValue: options.db },
@@ -210,7 +216,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as Pick<HttpClient, 'post'>,
+      http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -222,6 +228,73 @@ describe('SyncService', () => {
     expect(postCalls).toHaveLength(1);
     expect((postCalls[0]?.body as { last_sync_seq: number }).last_sync_seq).toBe(5);
     expect((postCalls[0]?.body as { changes: unknown[] }).changes).toEqual([]);
+  });
+
+  it('keeps queued local mutations when a stale sync requires reset', async () => {
+    const db = new FakeDbService();
+    const storage = new FakeStorageService();
+    const localEntry: KcalEntry = {
+      id: 'entry-reset-local',
+      kcal_delta: 250,
+      happened_at: '2026-03-23T12:00:00Z',
+    };
+
+    db.entries.seed([localEntry]);
+    await db.pendingMutations.bulkAdd([
+      {
+        kind: 'entry',
+        payload: {
+          entity_table: 'kcal_entries',
+          ...localEntry,
+          deleted: false,
+          client_updated_at: '2026-03-23T12:02:00Z',
+        },
+      },
+    ]);
+    await db.syncState.put({ id: 'pull_snapshot' });
+    storage.set('device_id', 'device-reset');
+    storage.set('last_sync_seq', 5);
+
+    const http = {
+      post: () =>
+        of({
+          data: {
+            reset_required: true,
+            reset_reason: 'client cursor is older than the retained tombstone history',
+            last_sync_seq: 10,
+            min_valid_seq: 8,
+            push_results: [],
+            pull_changes: [
+              {
+                entity_table: 'kcal_entries',
+                id: 'entry-server',
+                kcal_delta: 100,
+                happened_at: '2026-03-23T08:00:00Z',
+                deleted: false,
+                client_updated_at: '2026-03-23T08:01:00Z',
+                global_version: 10,
+                server_updated_at: '2026-03-23T08:01:01Z',
+              },
+            ],
+          },
+        } satisfies KcalSyncResponse),
+    };
+
+    const service = createService({
+      http: http as unknown as Pick<HttpClient, 'post'>,
+      storage: storage as unknown as StorageService,
+      db: db as unknown as DbService,
+    });
+    await service.pull();
+
+    expect(await db.pendingMutations.count()).toBe(1);
+    expect(service.entries()).toContainEqual(localEntry);
+    expect(service.entries()).toContainEqual({
+      id: 'entry-server',
+      kcal_delta: 100,
+      happened_at: '2026-03-23T08:00:00Z',
+    });
+    expect(storage.get<number>('last_sync_seq')).toBe(10);
   });
 
   it('flushes the deduplicated offline queue in a single sync request', async () => {
@@ -315,7 +388,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as Pick<HttpClient, 'post'>,
+      http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -385,7 +458,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as Pick<HttpClient, 'post'>,
+      http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -437,7 +510,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as Pick<HttpClient, 'post'>,
+      http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
@@ -459,7 +532,9 @@ describe('SyncService', () => {
       id: 'template-string-kcal',
       kcal_amount: 90,
     });
-    expect(typeof (storedTemplates[0] as { kcal_amount: unknown }).kcal_amount).toBe('number');
+    expect(typeof (storedTemplates[0] as unknown as { kcal_amount: unknown }).kcal_amount).toBe(
+      'number',
+    );
   });
 
   it('builds a notice for discarded offline changes', async () => {
@@ -509,7 +584,7 @@ describe('SyncService', () => {
     };
 
     const service = createService({
-      http: http as Pick<HttpClient, 'post'>,
+      http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
