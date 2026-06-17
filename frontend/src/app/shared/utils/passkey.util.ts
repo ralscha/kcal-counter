@@ -14,18 +14,6 @@ function bufferToBase64url(buffer: ArrayBuffer | ArrayBufferView): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-export async function supportsImmediateMediation(): Promise<boolean> {
-  try {
-    const PKC = PublicKeyCredential as unknown as {
-      getClientCapabilities?: () => Promise<Record<string, boolean>>;
-    };
-    const caps = await PKC.getClientCapabilities?.();
-    return caps?.['immediateGet'] === true;
-  } catch {
-    return false;
-  }
-}
-
 export function prepareCreationOptions(
   raw: PublicKeyCredentialCreationOptionsJSON,
 ): PublicKeyCredentialCreationOptions {

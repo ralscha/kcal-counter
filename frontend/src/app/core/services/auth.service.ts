@@ -8,7 +8,6 @@ import {
   prepareCreationOptions,
   serializeAssertionCredential,
   serializeAttestationCredential,
-  supportsImmediateMediation,
 } from '../../shared/utils/passkey.util';
 
 interface UserEnvelope {
@@ -85,10 +84,8 @@ export class AuthService {
     );
 
     const requestOptions = prepareAssertionOptions(startRes.data.options.publicKey);
-    const useImmediate = await supportsImmediateMediation();
     const assertion = await navigator.credentials.get({
       publicKey: requestOptions,
-      ...(useImmediate ? { mediation: 'immediate' as CredentialMediationRequirement } : {}),
     });
     if (!assertion) {
       throw new Error('No assertion returned.');
