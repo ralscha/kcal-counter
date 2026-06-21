@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Service, inject, signal } from '@angular/core';
 import { DbService } from './db.service';
 
 export interface ProfilePreferences {
@@ -12,7 +12,7 @@ const DEFAULT_PROFILE_PREFERENCES: ProfilePreferences = {
   cycleStartDate: null,
 };
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class ProfilePreferencesService {
   readonly #db = inject(DbService);
   readonly #preferences = signal<ProfilePreferences>(DEFAULT_PROFILE_PREFERENCES);

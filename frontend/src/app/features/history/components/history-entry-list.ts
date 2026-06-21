@@ -1,11 +1,10 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { KcalEntry } from '../../../core/models/kcal.model';
 
 @Component({
   selector: 'app-history-entry-list',
   standalone: true,
   templateUrl: './history-entry-list.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HistoryEntryListComponent {
   readonly entries = input.required<KcalEntry[]>();

@@ -1,13 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-} from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -31,7 +22,6 @@ import { TemplatesListComponent } from './components/templates-list';
     TemplatesDeleteModalComponent,
   ],
   templateUrl: './templates.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TemplatesComponent {
   readonly #destroyRef = inject(DestroyRef);

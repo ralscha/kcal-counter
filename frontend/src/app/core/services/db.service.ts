@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Service } from '@angular/core';
 import Dexie, { type Table } from 'dexie';
 import { KcalTemplateItem, KcalEntry, KcalSyncChange } from '../models/kcal.model';
 
@@ -18,7 +18,7 @@ export interface SyncStateRecord {
   id: string;
 }
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class DbService extends Dexie {
   templates!: Table<KcalTemplateItem, string>;
   entries!: Table<KcalEntry, string>;

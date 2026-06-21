@@ -1,10 +1,10 @@
-import { Injectable, signal, effect, inject } from '@angular/core';
+import { Service, signal, effect, inject } from '@angular/core';
 import { StorageService } from './storage.service';
 
 export type Theme = 'light' | 'dark';
 const THEME_KEY = 'theme';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class ThemeService {
   readonly #storage = inject(StorageService);
   readonly #theme = signal<Theme>('light');

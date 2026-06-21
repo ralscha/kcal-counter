@@ -31,6 +31,9 @@ func FreshPostgresDatabaseURL(t *testing.T, ctx context.Context) string {
 
 	adminURL, err := sharedPostgresConnectionString(ctx)
 	if err != nil {
+		if isPostgresContainerUnavailable(err) {
+			t.Skipf("Postgres test container unavailable: %v", err)
+		}
 		t.Fatalf("sharedPostgresConnectionString() error = %v", err)
 	}
 
@@ -76,6 +79,13 @@ func FreshPostgresDatabaseURL(t *testing.T, ctx context.Context) string {
 	return databaseURL
 }
 
+func isPostgresContainerUnavailable(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "get provider") ||
+		strings.Contains(message, "Docker is not available") ||
+		strings.Contains(message, "Cannot connect to the Docker daemon") ||
+		strings.Contains(message, "rootless Docker is not supported on Windows")
+}
 func sharedPostgresConnectionString(ctx context.Context) (string, error) {
 	sharedPostgresOnce.Do(func() {
 		container, err := tcpostgres.Run(

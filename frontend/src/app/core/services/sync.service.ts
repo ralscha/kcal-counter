@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { Injectable, inject, signal } from '@angular/core';
+import { Service, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
@@ -58,7 +58,7 @@ interface SyncNoticeDetail {
   queryParams: Record<string, string> | null;
 }
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class SyncService {
   readonly #document = inject(DOCUMENT);
   readonly #http = inject(HttpClient);

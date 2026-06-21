@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { KcalEntry } from '../../../core/models/kcal.model';
 
@@ -7,7 +7,6 @@ import { KcalEntry } from '../../../core/models/kcal.model';
   standalone: true,
   imports: [RouterLink],
   templateUrl: './dashboard-summary.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardSummaryComponent {
   readonly selectedDateLabel = input.required<string>();

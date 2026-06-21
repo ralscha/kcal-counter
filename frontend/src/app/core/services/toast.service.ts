@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Service, signal } from '@angular/core';
 
 export type ToastKind = 'success' | 'error' | 'info' | 'warning';
 
@@ -17,7 +17,7 @@ export interface ToastMessage {
 
 const DEFAULT_DURATION_MS = 3500;
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class ToastService {
   readonly #messages = signal<ToastMessage[]>([]);
   readonly #timeouts = new Map<number, number>();

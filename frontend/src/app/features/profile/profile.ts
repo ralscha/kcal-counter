@@ -1,11 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
@@ -31,7 +24,6 @@ function localDateToday(): string {
   selector: 'app-profile-page',
   imports: [ReactiveFormsModule, ThemeToggleComponent, CustomKeypadInputComponent],
   templateUrl: './profile.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfilePageComponent {
   protected readonly integerKeypadRows = INTEGER_KEYPAD_ROWS;

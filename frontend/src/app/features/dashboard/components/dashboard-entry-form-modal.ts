@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { FormGroup, ReactiveFormsModule } from '@angular/forms';
 import {
   CustomKeypadInputComponent,
@@ -11,7 +11,6 @@ import {
   standalone: true,
   imports: [ReactiveFormsModule, CustomKeypadInputComponent],
   templateUrl: './dashboard-entry-form-modal.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardEntryFormModalComponent {
   protected readonly decimalKeypadRows = DECIMAL_KEYPAD_ROWS;

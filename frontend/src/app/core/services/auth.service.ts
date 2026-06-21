@@ -1,4 +1,4 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Service, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -24,7 +24,7 @@ interface PasskeyRegisterEnvelope {
   };
 }
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class AuthService {
   readonly #http = inject(HttpClient);
   readonly #router = inject(Router);

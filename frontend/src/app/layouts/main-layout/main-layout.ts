@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { NgOptimizedImage } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { SyncService } from '../../core/services/sync.service';
@@ -15,7 +16,6 @@ interface NavigationItem {
   selector: 'app-main-layout',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage],
   templateUrl: './main-layout.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscapeKey()',
   },
@@ -25,6 +25,7 @@ export class MainLayoutComponent implements OnInit {
   protected readonly currentUser = this.auth.currentUser;
   protected readonly sync = inject(SyncService);
   readonly #router = inject(Router);
+  readonly #destroyRef = inject(DestroyRef);
 
   protected showMobileNav = signal(false);
   protected readonly navigationItems: NavigationItem[] = [
@@ -53,9 +54,14 @@ export class MainLayoutComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.#router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
-      this.showMobileNav.set(false);
-    });
+    this.#router.events
+      .pipe(
+        filter((e) => e instanceof NavigationEnd),
+        takeUntilDestroyed(this.#destroyRef),
+      )
+      .subscribe(() => {
+        this.showMobileNav.set(false);
+      });
   }
 
   protected signOut(): void {

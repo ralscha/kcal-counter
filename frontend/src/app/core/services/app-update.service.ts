@@ -1,12 +1,12 @@
 import { DOCUMENT } from '@angular/common';
-import { Injectable, inject, signal } from '@angular/core';
+import { Service, inject, signal } from '@angular/core';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { ToastService } from './toast.service';
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const LAST_UPDATE_CHECK_KEY = 'kcal_last_update_check_time';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class AppUpdateService {
   readonly #document = inject(DOCUMENT);
   readonly #swUpdate = inject(SwUpdate);

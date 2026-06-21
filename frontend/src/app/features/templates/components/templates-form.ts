@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { KcalTemplateItem, KcalTemplateKind } from '../../../core/models/kcal.model';
 import {
@@ -12,7 +12,6 @@ import {
   standalone: true,
   imports: [ReactiveFormsModule, CustomKeypadInputComponent],
   templateUrl: './templates-form.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TemplatesFormComponent {
   protected readonly decimalKeypadRows = DECIMAL_KEYPAD_ROWS;

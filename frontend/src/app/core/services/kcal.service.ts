@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Service, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { KcalTemplateItem, KcalEntry } from '../models/kcal.model';
@@ -15,7 +15,7 @@ interface TotalResponse {
   data: { total_kcal: number };
 }
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class KcalService {
   readonly #http = inject(HttpClient);
 

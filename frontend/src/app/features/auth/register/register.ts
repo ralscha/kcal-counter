@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SyncService } from '../../../core/services/sync.service';
@@ -9,7 +9,6 @@ import { toastErrorMessage } from '../../../shared/utils/toast-error';
   selector: 'app-register',
   imports: [RouterLink],
   templateUrl: './register.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RegisterComponent {
   readonly #auth = inject(AuthService);

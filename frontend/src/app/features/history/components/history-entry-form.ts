@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { ReactiveFormsModule, FormGroup } from '@angular/forms';
 import { CustomKeypadInputComponent } from '../../../shared/components/custom-keypad-input/custom-keypad-input';
 
@@ -7,7 +7,6 @@ import { CustomKeypadInputComponent } from '../../../shared/components/custom-ke
   standalone: true,
   imports: [ReactiveFormsModule, CustomKeypadInputComponent],
   templateUrl: './history-entry-form.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HistoryEntryFormComponent {
   readonly dateKey = input.required<string>();

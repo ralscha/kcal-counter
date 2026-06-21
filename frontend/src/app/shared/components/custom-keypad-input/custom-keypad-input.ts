@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   effect,
@@ -57,7 +56,6 @@ export const EXPRESSION_KEYPAD_ROWS = [
       multi: true,
     },
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'block',
     '(focusout)': 'handleHostFocusOut()',

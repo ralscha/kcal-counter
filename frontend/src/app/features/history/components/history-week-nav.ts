@@ -1,10 +1,9 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 
 @Component({
   selector: 'app-history-week-nav',
   standalone: true,
   templateUrl: './history-week-nav.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HistoryWeekNavComponent {
   readonly weekLabel = input.required<string>();

@@ -1,12 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SyncService } from '../../core/services/sync.service';
@@ -84,7 +77,6 @@ function toIsoFromLocalDateAndTime(dateKey: string, time: string): string {
     DashboardEntryFormModalComponent,
   ],
   templateUrl: './dashboard.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardComponent {
   readonly #document = inject(DOCUMENT);
@@ -326,7 +318,7 @@ export class DashboardComponent {
       this.form.patchValue({ kcal_delta: normalizedKcal });
 
       const editing = this.editingEntry();
-      const dateKey = editing ? toLocalDateKey(editing.happened_at) : localDateToday();
+      const dateKey = editing ? toLocalDateKey(editing.happened_at) : this.selectedDate();
       const entry: KcalEntry = {
         id: editing?.id ?? generateUuid(),
         kcal_delta: normalizedKcal,
@@ -353,7 +345,7 @@ export class DashboardComponent {
   }
 
   protected templateName(tmpl: KcalTemplateItem): string {
-    return `${tmpl.name} — ${tmpl.kcal_amount} kcal / ${tmpl.amount} ${tmpl.unit}`;
+    return `${tmpl.name} - ${tmpl.kcal_amount} kcal / ${tmpl.amount} ${tmpl.unit}`;
   }
 
   protected templatePickerTitle(): string {

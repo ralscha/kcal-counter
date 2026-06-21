@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  DestroyRef,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -109,7 +101,6 @@ function buildEntryTimestamp(
     HistoryDeleteModalComponent,
   ],
   templateUrl: './history.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HistoryComponent {
   readonly #destroyRef = inject(DestroyRef);

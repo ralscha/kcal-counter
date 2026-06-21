@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 import { KcalEntry } from '../../../core/models/kcal.model';
 import { HistoryDay } from '../history.models';
@@ -10,7 +10,6 @@ import { HistoryEntryListComponent } from './history-entry-list';
   standalone: true,
   imports: [HistoryEntryFormComponent, HistoryEntryListComponent],
   templateUrl: './history-day-details.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HistoryDayDetailsComponent {
   readonly day = input.required<HistoryDay>();
