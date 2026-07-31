@@ -12,7 +12,7 @@
     "test": "bun test"
   },
   "private": true,
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.18.0",
   "dependencies": {
     "@angular/common": "22.1.0",
     "@angular/compiler": "22.1.0",
@@ -21,7 +21,7 @@
     "@angular/platform-browser": "22.1.0",
     "@angular/router": "22.1.0",
     "@angular/service-worker": "22.1.0",
-    "daisyui": "5.7.8",
+    "daisyui": "5.7.9",
     "dexie": "4.4.4",
     "rxjs": "7.8.2",
     "tailwindcss": "4.3.3",
