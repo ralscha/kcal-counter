@@ -31,7 +31,7 @@ func (s *Service) BeginPasskeyRegistration(ctx context.Context, userID int64) (*
 		user,
 		wa.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
 		wa.WithExclusions(wa.Credentials(user.WebAuthnCredentials()).CredentialDescriptors()),
-		wa.WithExtensions(map[string]any{"credProps": true}),
+		wa.WithExtensions(wa.WithExtensionCredProps()),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -55,7 +55,7 @@ func (s *Service) BeginPasskeyRegistrationForNewUser(ctx context.Context) (*prot
 	options, session, err := s.webAuthn.BeginRegistration(
 		user,
 		wa.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
-		wa.WithExtensions(map[string]any{"credProps": true}),
+		wa.WithExtensions(wa.WithExtensionCredProps()),
 	)
 	if err != nil {
 		return nil, nil, err
