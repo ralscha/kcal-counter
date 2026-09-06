@@ -103,6 +103,7 @@
       class="md:hidden fixed inset-0 z-40 flex overflow-hidden"
       [class.pointer-events-none]="!showMobileNav()"
       [class.pointer-events-auto]="showMobileNav()"
+      [attr.inert]="showMobileNav() ? null : ''"
     >
       <aside
         id="mobile-navigation-drawer"
@@ -215,6 +216,32 @@
     </div>
 
     <main class="flex-1 overflow-y-auto">
+      <div class="mx-4 mt-4 flex items-center justify-between gap-3 text-sm md:mx-6">
+        <p role="status" aria-live="polite">
+          @if (sync.syncing()) {
+            Syncing...
+          } @else if (sync.syncError()) {
+            {{ sync.syncError() }}
+          } @else if (sync.pendingCount() > 0) {
+            Saved on this device.
+          } @else if (sync.lastSyncedAt()) {
+            All changes synced.
+          } @else {
+            Ready to sync.
+          }
+          @if (sync.pendingCount() > 0) {
+            <span>{{ sync.pendingCount() }} pending.</span>
+          }
+        </p>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm shrink-0"
+          [disabled]="sync.syncing()"
+          (click)="sync.pull()"
+        >
+          Sync now
+        </button>
+      </div>
       @if (sync.syncNotice(); as syncNotice) {
         <div
           [class]="

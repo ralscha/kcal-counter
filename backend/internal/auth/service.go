@@ -35,7 +35,7 @@ type Service struct {
 	cfg      config.Config
 }
 type SessionPrincipal struct {
-	UserID int64    `json:"-"`
+	UserID int64    `json:"user_id,string"`
 	Roles  []string `json:"roles"`
 }
 

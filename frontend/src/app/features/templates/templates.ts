@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SyncService } from '../../core/services/sync.service';
+import { ToastService } from '../../core/services/toast.service';
 import { KcalTemplateItem, KcalTemplateKind } from '../../core/models/kcal.model';
 import { normalizeTemplateKcalAmount } from '../../core/services/sync-push.util';
 import { generateUuid } from '../../shared/utils/uuid';
@@ -29,6 +30,7 @@ export class TemplatesComponent {
   readonly #route = inject(ActivatedRoute);
   readonly #router = inject(Router);
   readonly #sync = inject(SyncService);
+  readonly #toast = inject(ToastService);
 
   readonly kind = input<string>('food');
 
@@ -147,7 +149,7 @@ export class TemplatesComponent {
         unit,
         kcal_amount: normalizeTemplateKcalAmount(kcal_amount),
       };
-      this.#sync.upsertTemplate(item);
+      await this.#sync.upsertTemplate(item);
       this.showForm.set(false);
       this.editingItem.set(null);
     } catch (e) {
@@ -155,20 +157,25 @@ export class TemplatesComponent {
         const body = e.error as { error?: { message?: string } };
         this.formError.set(body?.error?.message ?? 'Failed to save.');
       } else {
-        this.formError.set('Failed to save.');
+        this.formError.set(e instanceof Error ? e.message : 'Failed to save.');
       }
     } finally {
       this.formLoading.set(false);
     }
   }
 
-  protected confirmDelete(): void {
+  protected async confirmDelete(): Promise<void> {
     const item = this.pendingDeleteItem();
     if (!item) {
       return;
     }
 
-    this.#sync.deleteTemplate(item.id);
+    try {
+      await this.#sync.deleteTemplate(item.id);
+    } catch {
+      this.#toast.error('Could not delete template. Please try again.');
+      return;
+    }
     this.pendingDeleteItem.set(null);
   }
 

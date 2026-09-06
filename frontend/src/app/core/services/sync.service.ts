@@ -1,6 +1,6 @@
 import { DOCUMENT } from '@angular/common';
-import { Service, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { DestroyRef, Service, inject, signal } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 import {
@@ -10,7 +10,7 @@ import {
   KcalTemplateItem,
 } from '../models/kcal.model';
 import { StorageService } from './storage.service';
-import { DbService } from './db.service';
+import { AccountDb, DbService, type LegacyDeviceData } from './db.service';
 import { generateUuid } from '../../shared/utils/uuid';
 import {
   buildBatchSyncRequest,
@@ -25,30 +25,13 @@ import {
 } from './sync-push.util';
 import { resolvePullSinceSeq } from './sync-pull.util';
 
-const DEVICE_ID_KEY = 'device_id';
-const LAST_SYNC_SEQ_KEY = 'last_sync_seq';
-const SYNC_SNAPSHOT_RECORD_ID = 'pull_snapshot';
-const SYNC_RETRY_BASE_MS = 1_000;
-const SYNC_RETRY_MAX_MS = 30_000;
-const FOREGROUND_SYNC_DEBOUNCE_MS = 1_000;
+const SNAPSHOT_ID = 'pull_snapshot';
+const RETRY_BASE_MS = 1_000;
+const RETRY_MAX_MS = 30_000;
 
-function normalizeTemplateItem(item: KcalTemplateItem): KcalTemplateItem {
-  return {
-    ...item,
-    amount: normalizeTemplateAmount(item.amount),
-    kcal_amount: normalizeTemplateKcalAmount(item.kcal_amount),
-  };
-}
-
-function compareClientUpdatedAt(left: string, right: string): number {
-  return left.trim().localeCompare(right.trim());
-}
-
-interface SyncNotice {
-  title: string;
-  message: string;
-  details: SyncNoticeDetail[];
-  tone: 'info' | 'warning';
+interface SyncAccount {
+  userId: string;
+  db: AccountDb;
 }
 
 interface SyncNoticeDetail {
@@ -58,575 +41,481 @@ interface SyncNoticeDetail {
   queryParams: Record<string, string> | null;
 }
 
+interface SyncNotice {
+  title: string;
+  message: string;
+  details: SyncNoticeDetail[];
+  tone: 'info' | 'warning';
+}
+
 @Service()
 export class SyncService {
   readonly #document = inject(DOCUMENT);
   readonly #http = inject(HttpClient);
   readonly #storage = inject(StorageService);
-  readonly #db = inject(DbService);
-
+  readonly #databases = inject(DbService);
   readonly #deviceId = this.#initDeviceId();
 
   readonly templates = signal<KcalTemplateItem[]>([]);
   readonly entries = signal<KcalEntry[]>([]);
   readonly syncNotice = signal<SyncNotice | null>(null);
+  readonly syncing = signal(false);
+  readonly pendingCount = signal(0);
+  readonly syncError = signal('');
+  readonly lastSyncedAt = signal<string | null>(null);
 
-  #isSyncing = false;
-  #syncPendingRequested = false;
-  #syncRetryDelayMs = 0;
-  #syncRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  #lastForegroundSyncRequestedAt = 0;
+  #account: SyncAccount | null = null;
+  #task: { account: SyncAccount; promise: Promise<void> } | null = null;
+  #retryDelayMs = 0;
+  #timer: ReturnType<typeof setTimeout> | null = null;
+  #lastTimestamp = 0;
 
   constructor() {
+    const onActive = (): void => {
+      if (this.#document.visibilityState === 'visible') {
+        this.#requestSync(0);
+      }
+    };
+    const onOnline = (): void => this.#requestSync(0);
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => this.#requestSyncPending(0));
-      this.#document.addEventListener('visibilitychange', this.#handleVisibilityChange);
-      window.addEventListener('pageshow', this.#handleAppBecameActive);
+      window.addEventListener('online', onOnline);
+      window.addEventListener('pageshow', onActive);
+      this.#document.addEventListener('visibilitychange', onActive);
+      inject(DestroyRef).onDestroy(() => {
+        window.removeEventListener('online', onOnline);
+        window.removeEventListener('pageshow', onActive);
+        this.#document.removeEventListener('visibilitychange', onActive);
+        this.#cancelTimer();
+        this.#account = null;
+      });
+    }
+  }
+
+  async setAccount(userId: string | null): Promise<void> {
+    if (this.#account?.userId === userId) {
+      return;
+    }
+    this.#cancelTimer();
+    this.#account = userId ? { userId, db: this.#databases.forUser(userId) } : null;
+    this.templates.set([]);
+    this.entries.set([]);
+    this.pendingCount.set(0);
+    this.syncing.set(false);
+    this.syncError.set('');
+    this.syncNotice.set(null);
+    this.lastSyncedAt.set(null);
+    this.#retryDelayMs = 0;
+    if (this.#account) {
+      await this.#hydrate(this.#account);
     }
   }
 
   #initDeviceId(): string {
-    let id = this.#storage.get<string>(DEVICE_ID_KEY);
+    let id = this.#storage.get<string>('device_id');
     if (!id) {
       id = generateUuid();
-      this.#storage.set(DEVICE_ID_KEY, id);
+      this.#storage.set('device_id', id);
     }
     return id;
   }
 
   #timestamp(): string {
-    return new Date().toISOString();
+    this.#lastTimestamp = Math.max(Date.now(), this.#lastTimestamp + 1);
+    return new Date(this.#lastTimestamp).toISOString();
   }
 
-  #lastSyncSeq(): number {
-    return this.#storage.get<number>(LAST_SYNC_SEQ_KEY) ?? 0;
-  }
-
-  #saveLastSyncSeq(seq: number): void {
-    this.#storage.set(LAST_SYNC_SEQ_KEY, seq);
-  }
-
-  async #hydrateFromDb(): Promise<{
-    templateCount: number;
-    entryCount: number;
-    pendingMutationCount: number;
-    hasSnapshot: boolean;
-  }> {
-    const [rawTemplates, entries, pendingMutationCount, snapshot] = await Promise.all([
-      this.#db.templates.toArray(),
-      this.#db.entries.toArray(),
-      this.#db.pendingMutations.count(),
-      this.#db.syncState.get(SYNC_SNAPSHOT_RECORD_ID),
-    ]);
-
-    const templates = rawTemplates.map((template) => normalizeTemplateItem(template));
-    if (rawTemplates.some((template, index) => template.amount !== templates[index]?.amount)) {
-      await this.#db.templates.bulkPut(templates);
+  async #hydrate(account: SyncAccount): Promise<void> {
+    const { db } = account;
+    const [templates, entries, pending, snapshot] = await db.transaction(
+      'r',
+      [db.templates, db.entries, db.pendingMutations, db.syncState],
+      () =>
+        Promise.all([
+          db.templates.toArray(),
+          db.entries.toArray(),
+          db.pendingMutations.toArray(),
+          db.syncState.get(SNAPSHOT_ID),
+        ]),
+    );
+    if (this.#account !== account) {
+      return;
     }
-
     this.templates.set(templates);
     this.entries.set(entries);
-    return {
-      templateCount: templates.length,
-      entryCount: entries.length,
-      pendingMutationCount,
-      hasSnapshot: snapshot !== undefined,
-    };
+    this.pendingCount.set(dedupeQueuedMutations(pending).length);
+    this.lastSyncedAt.set(snapshot?.lastSyncedAt ?? null);
   }
 
   async pull(options: { syncPending?: boolean } = {}): Promise<void> {
-    const { syncPending = true } = options;
-    if (syncPending) {
-      await this.#syncPending(true, true);
+    const account = this.#account;
+    if (!account) {
       return;
     }
-
-    await this.#syncPending(true, false);
+    if (this.#task?.account === account) {
+      return this.#task.promise;
+    }
+    this.#cancelTimer();
+    const task = { account, promise: this.#runSync(account, options.syncPending ?? true) };
+    this.#task = task;
+    try {
+      await task.promise;
+    } finally {
+      if (this.#task === task) {
+        this.#task = null;
+      }
+    }
   }
 
   dismissSyncNotice(): void {
     this.syncNotice.set(null);
   }
 
-  #requestSyncPending(delayMs: number): void {
-    this.#syncPendingRequested = true;
-    if (this.#syncRetryTimer !== null) {
-      clearTimeout(this.#syncRetryTimer);
+  #cancelTimer(): void {
+    if (this.#timer !== null) {
+      clearTimeout(this.#timer);
+      this.#timer = null;
     }
-    this.#syncRetryTimer = setTimeout(() => {
-      this.#syncRetryTimer = null;
-      void this.#syncPending(true, true);
+  }
+
+  #requestSync(delayMs: number): void {
+    if (!this.#account) {
+      return;
+    }
+    this.#cancelTimer();
+    this.#timer = setTimeout(() => {
+      this.#timer = null;
+      void this.pull();
     }, delayMs);
   }
 
-  readonly #handleVisibilityChange = (): void => {
-    if (this.#document.visibilityState !== 'visible') {
-      return;
-    }
-
-    this.#requestForegroundSync();
-  };
-
-  readonly #handleAppBecameActive = (): void => {
-    this.#requestForegroundSync();
-  };
-
-  #requestForegroundSync(): void {
-    const now = Date.now();
-    if (now - this.#lastForegroundSyncRequestedAt < FOREGROUND_SYNC_DEBOUNCE_MS) {
-      return;
-    }
-
-    this.#lastForegroundSyncRequestedAt = now;
-    this.#requestSyncPending(0);
-  }
-
-  #nextRetryDelay(): number {
-    return this.#syncRetryDelayMs === 0
-      ? SYNC_RETRY_BASE_MS
-      : Math.min(this.#syncRetryDelayMs * 2, SYNC_RETRY_MAX_MS);
-  }
-
-  async #replacePendingMutations(mutations: QueuedSyncMutation[]): Promise<void> {
-    await this.#db.pendingMutations.clear();
-    if (mutations.length) {
-      await this.#db.pendingMutations.bulkAdd(
-        mutations.map(({ kind, payload }) => ({ kind, payload })),
-      );
-    }
-  }
-
-  async #loadPendingMutations(): Promise<QueuedSyncMutation[]> {
-    const pending = await this.#db.pendingMutations.toArray();
+  // Retain queue IDs: acknowledgements must only remove the exact edits sent.
+  async #loadPending(db: AccountDb): Promise<QueuedSyncMutation[]> {
+    const pending = await db.pendingMutations.toArray();
     const deduped = dedupeQueuedMutations(pending);
-    if (deduped.length !== pending.length) {
-      await this.#replacePendingMutations(deduped);
-      return this.#db.pendingMutations.toArray();
+    const retainedIds = new Set(deduped.map((mutation) => mutation.id));
+    const obsoleteIds = pending.flatMap((mutation) =>
+      mutation.id !== undefined && !retainedIds.has(mutation.id) ? [mutation.id] : [],
+    );
+    if (obsoleteIds.length) {
+      await db.pendingMutations.bulkDelete(obsoleteIds);
     }
     return deduped;
   }
 
-  async #queuePendingMutation(mutation: QueuedSyncMutation): Promise<void> {
-    await this.#db.transaction('rw', this.#db.pendingMutations, async () => {
-      const pending = await this.#db.pendingMutations.toArray();
-      const deduped = dedupeQueuedMutations([...pending, mutation]);
-      await this.#replacePendingMutations(deduped);
-    });
-  }
-
-  async #postSyncRequest(pending: QueuedSyncMutation[]): Promise<KcalSyncResponse> {
-    const localState = await this.#hydrateFromDb();
-    const lastSyncSeq = this.#lastSyncSeq();
-    const syncSeq = resolvePullSinceSeq({ ...localState, lastSeq: lastSyncSeq });
-    if (syncSeq !== lastSyncSeq) {
-      this.#saveLastSyncSeq(syncSeq);
-    }
-
-    return firstValueFrom(
-      this.#http.post<KcalSyncResponse>(
-        '/api/v1/kcal/sync',
-        buildBatchSyncRequest(this.#deviceId, syncSeq, pending),
-        { withCredentials: true },
-      ),
-    );
-  }
-
-  async #applyServerChanges(
-    changes: KcalSyncChange[],
-    pendingByEntity: Map<string, QueuedSyncMutation>,
-  ): Promise<void> {
-    const templates = new Map(this.templates().map((item) => [item.id, item]));
-    const entries = new Map(this.entries().map((item) => [item.id, item]));
-
-    const templatesToPut: KcalTemplateItem[] = [];
-    const templateIdsToDelete: string[] = [];
-    const entriesToPut: KcalEntry[] = [];
-    const entryIdsToDelete: string[] = [];
-
+  async #writeChanges(db: AccountDb, changes: KcalSyncChange[]): Promise<void> {
     for (const rawChange of changes) {
       const change = normalizeSyncChange(rawChange);
-      const pending = pendingByEntity.get(
-        queuedMutationKey(
-          change.entity_table === 'kcal_template_items' ? 'template' : 'entry',
-          change.id,
+      if (change.entity_table === 'kcal_template_items') {
+        if (change.deleted) {
+          await db.templates.delete(change.id);
+        } else {
+          const { id, kind, name, amount, unit, kcal_amount } = change;
+          await db.templates.put({ id, kind, name, amount, unit, kcal_amount });
+        }
+      } else if (change.deleted) {
+        await db.entries.delete(change.id);
+      } else {
+        const { id, kcal_delta, happened_at } = change;
+        await db.entries.put({ id, kcal_delta, happened_at });
+      }
+    }
+  }
+
+  async #runSync(account: SyncAccount, includePending: boolean): Promise<void> {
+    const { db, userId } = account;
+    this.syncing.set(true);
+    this.syncError.set('');
+    try {
+      const { pending, seq } = await db.transaction(
+        'rw',
+        [db.templates, db.entries, db.pendingMutations, db.syncState],
+        async () => {
+          const pending = await this.#loadPending(db);
+          const snapshot = await db.syncState.get(SNAPSHOT_ID);
+          const seq = resolvePullSinceSeq({
+            lastSeq: snapshot?.lastSeq ?? 0,
+            hasSnapshot: snapshot !== undefined,
+            templateCount: await db.templates.count(),
+            entryCount: await db.entries.count(),
+            pendingMutationCount: pending.length,
+          });
+          return { pending: includePending ? pending.slice(0, 200) : [], seq };
+        },
+      );
+      if (this.#account !== account) {
+        return;
+      }
+      const response = await firstValueFrom(
+        this.#http.post<KcalSyncResponse>(
+          '/api/v1/kcal/sync',
+          { ...buildBatchSyncRequest(this.#deviceId, seq, pending), user_id: userId },
+          { withCredentials: true, timeout: 15_000 },
         ),
       );
-      if (
-        pending &&
-        compareClientUpdatedAt(pending.payload.client_updated_at, change.client_updated_at) >= 0
-      ) {
-        continue;
+      if (this.#account !== account) {
+        return;
       }
-
-      if (change.entity_table === 'kcal_template_items') {
-        if (change.deleted) {
-          templates.delete(change.id);
-          templateIdsToDelete.push(change.id);
-        } else {
-          const item = normalizeTemplateItem({
-            id: change.id,
-            kind: change.kind,
-            name: change.name,
-            amount: change.amount,
-            unit: change.unit,
-            kcal_amount: change.kcal_amount,
+      const data = response.data;
+      await db.transaction(
+        'rw',
+        [db.templates, db.entries, db.pendingMutations, db.syncState],
+        async () => {
+          if (data.reset_required) {
+            await db.templates.clear();
+            await db.entries.clear();
+            await this.#writeChanges(db, data.pull_changes);
+            const queued = await this.#loadPending(db);
+            await this.#writeChanges(
+              db,
+              queued.map((mutation) => mutation.payload),
+            );
+          } else {
+            await db.pendingMutations.bulkDelete(
+              pending.flatMap((mutation) => (mutation.id === undefined ? [] : [mutation.id])),
+            );
+            const currentSnapshot = await db.syncState.get(SNAPSHOT_ID);
+            // Another tab may already have committed a more recent response.
+            if ((currentSnapshot?.lastSeq ?? 0) > data.last_sync_seq) {
+              return;
+            }
+            const queued = buildQueuedMutationIndex(await this.#loadPending(db));
+            const changes = [
+              ...data.push_results.map((result) => result.record),
+              ...data.pull_changes,
+            ];
+            await this.#writeChanges(
+              db,
+              changes.filter(
+                (change) =>
+                  !queued.has(
+                    queuedMutationKey(
+                      change.entity_table === 'kcal_template_items' ? 'template' : 'entry',
+                      change.id,
+                    ),
+                  ),
+              ),
+            );
+          }
+          await db.syncState.put({
+            id: SNAPSHOT_ID,
+            lastSeq: data.last_sync_seq,
+            lastSyncedAt: new Date().toISOString(),
           });
-          templates.set(change.id, item);
-          templatesToPut.push(item);
-        }
-      } else if (change.deleted) {
-        entries.delete(change.id);
-        entryIdsToDelete.push(change.id);
-      } else {
-        const item: KcalEntry = {
-          id: change.id,
-          kcal_delta: change.kcal_delta,
-          happened_at: change.happened_at,
-        };
-        entries.set(change.id, item);
-        entriesToPut.push(item);
+        },
+      );
+      await this.#hydrate(account);
+      if (this.#account !== account) {
+        return;
       }
-    }
-
-    this.templates.set([...templates.values()]);
-    this.entries.set([...entries.values()]);
-
-    await Promise.all([
-      templatesToPut.length ? this.#db.templates.bulkPut(templatesToPut) : Promise.resolve(),
-      templateIdsToDelete.length
-        ? this.#db.templates.bulkDelete(templateIdsToDelete)
-        : Promise.resolve(),
-      entriesToPut.length ? this.#db.entries.bulkPut(entriesToPut) : Promise.resolve(),
-      entryIdsToDelete.length ? this.#db.entries.bulkDelete(entryIdsToDelete) : Promise.resolve(),
-    ]);
-  }
-
-  async #replaceLocalState(
-    changes: KcalSyncChange[],
-    pendingMutations: QueuedSyncMutation[] = [],
-  ): Promise<void> {
-    const templates = new Map(
-      changes
-        .filter(
-          (change): change is Extract<KcalSyncChange, { entity_table: 'kcal_template_items' }> =>
-            change.entity_table === 'kcal_template_items' && !change.deleted,
-        )
-        .map(
-          (change) =>
-            [
-              change.id,
-              normalizeTemplateItem({
-                id: change.id,
-                kind: change.kind,
-                name: change.name,
-                amount: change.amount,
-                unit: change.unit,
-                kcal_amount: change.kcal_amount,
-              }),
-            ] as const,
-        ),
-    );
-    const entries = new Map(
-      changes
-        .filter(
-          (change): change is Extract<KcalSyncChange, { entity_table: 'kcal_entries' }> =>
-            change.entity_table === 'kcal_entries' && !change.deleted,
-        )
-        .map(
-          (change) =>
-            [
-              change.id,
-              {
-                id: change.id,
-                kcal_delta: change.kcal_delta,
-                happened_at: change.happened_at,
-              },
-            ] as const,
-        ),
-    );
-
-    const pending = dedupeQueuedMutations(pendingMutations);
-    for (const mutation of pending) {
-      const change = normalizeSyncChange(mutation.payload);
-      if (change.entity_table === 'kcal_template_items') {
-        if (change.deleted) {
-          templates.delete(change.id);
-        } else {
-          templates.set(
-            change.id,
-            normalizeTemplateItem({
-              id: change.id,
-              kind: change.kind,
-              name: change.name,
-              amount: change.amount,
-              unit: change.unit,
-              kcal_amount: change.kcal_amount,
-            }),
-          );
-        }
-      } else if (change.deleted) {
-        entries.delete(change.id);
-      } else {
-        entries.set(change.id, {
-          id: change.id,
-          kcal_delta: change.kcal_delta,
-          happened_at: change.happened_at,
+      this.#retryDelayMs = 0;
+      if (data.reset_required) {
+        this.syncNotice.set({
+          title: 'Offline cache was reset',
+          message:
+            data.reset_reason ??
+            'The server supplied a fresh snapshot. Your queued changes were kept.',
+          details: [],
+          tone: 'warning',
         });
+      } else {
+        this.#handleDiscardedChanges(data.push_results, buildQueuedMutationIndex(pending));
+      }
+      if (includePending && this.pendingCount() > 0) {
+        this.#requestSync(0);
+      }
+    } catch (error) {
+      if (this.#account !== account) {
+        return;
+      }
+      const status = error instanceof HttpErrorResponse ? error.status : 0;
+      if (status === 401 || status === 403) {
+        this.syncError.set('Sign in again to sync this account. Your local changes are saved.');
+      } else if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        this.syncError.set(
+          'The server could not accept these changes. Review your entries and templates, then retry.',
+        );
+      } else {
+        this.syncError.set(
+          'Could not sync. Your changes are saved on this device; retrying automatically.',
+        );
+        this.#retryDelayMs = Math.min(
+          this.#retryDelayMs ? this.#retryDelayMs * 2 : RETRY_BASE_MS,
+          RETRY_MAX_MS,
+        );
+        this.#requestSync(this.#retryDelayMs);
+      }
+    } finally {
+      if (this.#account === account) {
+        this.syncing.set(false);
       }
     }
-
-    const templateList = [...templates.values()];
-    const entryList = [...entries.values()];
-
-    await this.#db.templates.clear();
-    await this.#db.entries.clear();
-    await this.#replacePendingMutations(pending);
-    if (templateList.length) {
-      await this.#db.templates.bulkPut(templateList);
-    }
-    if (entryList.length) {
-      await this.#db.entries.bulkPut(entryList);
-    }
-
-    this.templates.set(templateList);
-    this.entries.set(entryList);
-  }
-
-  #describeQueuedMutation(mutation: QueuedSyncMutation): string {
-    if (mutation.payload.entity_table === 'kcal_template_items') {
-      return mutation.payload.deleted
-        ? `Deleted ${mutation.payload.kind} template "${mutation.payload.name}"`
-        : `${mutation.payload.kind} template "${mutation.payload.name}"`;
-    }
-
-    return mutation.payload.deleted
-      ? `Deleted entry from ${mutation.payload.happened_at}`
-      : `Entry ${mutation.payload.kcal_delta} kcal from ${mutation.payload.happened_at}`;
-  }
-
-  #buildReviewTarget(mutation: QueuedSyncMutation): {
-    reviewLabel: string | null;
-    routeCommands: string[] | null;
-    queryParams: Record<string, string> | null;
-  } {
-    if (mutation.payload.entity_table === 'kcal_template_items') {
-      return {
-        reviewLabel: 'Review template',
-        routeCommands:
-          mutation.payload.kind === 'activity' ? ['/templates', 'activity'] : ['/templates'],
-        queryParams: { review_template: mutation.payload.id },
-      };
-    }
-
-    return {
-      reviewLabel: 'Review entry',
-      routeCommands: ['/history'],
-      queryParams: { review_entry: mutation.payload.id },
-    };
   }
 
   #handleDiscardedChanges(
-    pushResults: KcalSyncResponse['data']['push_results'],
-    pendingByEntity: Map<string, QueuedSyncMutation>,
+    results: KcalSyncResponse['data']['push_results'],
+    pending: Map<string, QueuedSyncMutation>,
   ): void {
-    const discarded = pushResults.filter((result) => !result.applied);
+    const discarded = results.filter((result) => !result.applied);
     if (!discarded.length) {
       return;
     }
-
     this.syncNotice.set({
       title: 'Some offline changes were skipped',
       message: 'The server already had newer versions of some queued edits.',
-      details: discarded.map((result) => {
-        const mutation = pendingByEntity.get(
+      details: discarded.map(({ record }): SyncNoticeDetail => {
+        const mutation = pending.get(
           queuedMutationKey(
-            result.record.entity_table === 'kcal_template_items' ? 'template' : 'entry',
-            result.record.id,
+            record.entity_table === 'kcal_template_items' ? 'template' : 'entry',
+            record.id,
           ),
         );
         if (!mutation) {
           return {
-            message: `Change ${result.record.id} was skipped because the server already had a newer version.`,
+            message: `Change ${record.id} was skipped because the server already had a newer version.`,
             reviewLabel: null,
             routeCommands: null,
             queryParams: null,
           };
         }
-
+        const change = mutation.payload;
+        const template = change.entity_table === 'kcal_template_items';
+        const description = template
+          ? `${change.deleted ? 'Deleted ' : ''}${change.kind} template "${change.name}"`
+          : change.deleted
+            ? `Deleted entry from ${change.happened_at}`
+            : `Entry ${change.kcal_delta} kcal from ${change.happened_at}`;
         return {
-          message: `${this.#describeQueuedMutation(mutation)}: skipped because the server already had a newer version.`,
-          ...this.#buildReviewTarget(mutation),
+          message: `${description}: skipped because the server already had a newer version.`,
+          reviewLabel: template ? 'Review template' : 'Review entry',
+          routeCommands: template
+            ? change.kind === 'activity'
+              ? ['/templates', 'activity']
+              : ['/templates']
+            : ['/history'],
+          queryParams: template ? { review_template: change.id } : { review_entry: change.id },
         };
       }),
       tone: 'info',
     });
   }
 
-  async #syncPending(allowEmptySync: boolean, includePendingMutations = true): Promise<void> {
-    if (this.#isSyncing) {
-      this.#syncPendingRequested = true;
-      return;
+  async #persist(kind: 'template' | 'entry', change: KcalSyncChange): Promise<void> {
+    const account = this.#account;
+    if (!account) {
+      throw new Error('Sign in before saving changes.');
     }
-
-    this.#isSyncing = true;
-    this.#syncPendingRequested = false;
-    try {
-      const pending = includePendingMutations ? await this.#loadPendingMutations() : [];
-      if (!pending.length && !allowEmptySync) {
-        this.#syncRetryDelayMs = 0;
-        return;
-      }
-
-      const response = await this.#postSyncRequest(pending);
-      if (response.data.reset_required) {
-        await this.#replaceLocalState(
-          response.data.pull_changes,
-          await this.#loadPendingMutations(),
-        );
-        this.#saveLastSyncSeq(response.data.last_sync_seq);
-        await this.#db.syncState.put({ id: SYNC_SNAPSHOT_RECORD_ID });
-        this.#syncRetryDelayMs = 0;
-        this.syncNotice.set({
-          title: 'Offline cache was reset',
-          message:
-            response.data.reset_reason ??
-            'The server no longer retained enough sync history to merge local state safely.',
-          details: [],
-          tone: 'warning',
-        });
-        return;
-      }
-
-      const sentPendingByEntity = buildQueuedMutationIndex(pending);
-      const sentIds = pending.flatMap((mutation) =>
-        mutation.id === undefined ? [] : [mutation.id],
-      );
-      if (sentIds.length) {
-        await this.#db.pendingMutations.bulkDelete(sentIds);
-      }
-
-      const pendingByEntity = buildQueuedMutationIndex(await this.#loadPendingMutations());
-      await this.#applyServerChanges(
-        response.data.push_results.map((result) => result.record),
-        pendingByEntity,
-      );
-      await this.#applyServerChanges(response.data.pull_changes, pendingByEntity);
-      this.#saveLastSyncSeq(response.data.last_sync_seq);
-      await this.#db.syncState.put({ id: SYNC_SNAPSHOT_RECORD_ID });
-      this.#syncRetryDelayMs = 0;
-      this.#handleDiscardedChanges(response.data.push_results, sentPendingByEntity);
-    } catch {
-      if ((await this.#db.pendingMutations.count()) > 0 || allowEmptySync) {
-        this.#syncRetryDelayMs = this.#nextRetryDelay();
-        this.#requestSyncPending(this.#syncRetryDelayMs);
-      }
-    } finally {
-      this.#isSyncing = false;
-      if (this.#syncPendingRequested && this.#syncRetryDelayMs === 0) {
-        this.#requestSyncPending(0);
-      }
+    const { db } = account;
+    await db.transaction('rw', [db.templates, db.entries, db.pendingMutations], async () => {
+      await this.#writeChanges(db, [change]);
+      await db.pendingMutations.bulkAdd([{ kind, payload: change }]);
+      await this.#loadPending(db);
+    });
+    await this.#hydrate(account);
+    if (this.#account === account) {
+      this.#requestSync(0);
     }
   }
 
-  async #persistAndPush(kind: 'template' | 'entry', change: KcalSyncChange): Promise<void> {
-    const normalizedChange = normalizeSyncChange(change);
-
-    if (normalizedChange.entity_table === 'kcal_template_items') {
-      if (normalizedChange.deleted) {
-        await this.#db.templates.delete(normalizedChange.id);
-      } else {
-        await this.#db.templates.put(
-          normalizeTemplateItem({
-            id: normalizedChange.id,
-            kind: normalizedChange.kind,
-            name: normalizedChange.name,
-            amount: normalizedChange.amount,
-            unit: normalizedChange.unit,
-            kcal_amount: normalizedChange.kcal_amount,
-          }),
+  async recoverPreviousData(data: LegacyDeviceData): Promise<void> {
+    const account = this.#account;
+    if (!account) {
+      throw new Error('Sign in before recovering data.');
+    }
+    const { db } = account;
+    await db.transaction(
+      'rw',
+      [db.templates, db.entries, db.pendingMutations, db.profilePreferences],
+      async () => {
+        const existing = buildQueuedMutationIndex(await this.#loadPending(db));
+        const recovered = dedupeQueuedMutations(data.pendingMutations).filter(
+          (mutation) => !existing.has(queuedMutationKey(mutation.kind, mutation.payload.id)),
         );
-      }
-    } else if (normalizedChange.deleted) {
-      await this.#db.entries.delete(normalizedChange.id);
-    } else {
-      await this.#db.entries.put({
-        id: normalizedChange.id,
-        kcal_delta: normalizedChange.kcal_delta,
-        happened_at: normalizedChange.happened_at,
+        await this.#writeChanges(
+          db,
+          recovered.map((mutation) => mutation.payload),
+        );
+        await db.pendingMutations.bulkAdd(
+          recovered.map(({ kind, payload }) => ({ kind, payload })),
+        );
+        if (data.preferences && !(await db.profilePreferences.get('profile'))) {
+          await db.profilePreferences.put(data.preferences);
+        }
+      },
+    );
+    await this.#databases.markPreviousDataRecovered();
+    await this.#hydrate(account);
+    if (this.#account === account) {
+      this.#requestSync(0);
+    }
+  }
+
+  async upsertTemplate(item: KcalTemplateItem): Promise<void> {
+    const normalized = {
+      ...item,
+      name: item.name.trim(),
+      unit: item.unit.trim(),
+      amount: normalizeTemplateAmount(item.amount),
+      kcal_amount: normalizeTemplateKcalAmount(item.kcal_amount),
+    };
+    if (
+      !normalized.name ||
+      !normalized.unit ||
+      !Number.isFinite(Number(normalized.amount)) ||
+      Number(normalized.amount) <= 0 ||
+      !Number.isInteger(normalized.kcal_amount) ||
+      normalized.kcal_amount <= 0 ||
+      normalized.kcal_amount > 2147483647
+    ) {
+      throw new Error('Enter a name, unit, positive amount, and valid calories.');
+    }
+    await this.#persist('template', {
+      entity_table: 'kcal_template_items',
+      ...normalized,
+      deleted: false,
+      client_updated_at: this.#timestamp(),
+    });
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    const item = this.templates().find((template) => template.id === id);
+    if (item) {
+      await this.#persist('template', {
+        entity_table: 'kcal_template_items',
+        ...item,
+        deleted: true,
+        client_updated_at: this.#timestamp(),
       });
     }
-
-    await this.#queuePendingMutation({ kind, payload: normalizedChange });
-    await this.#syncPending(false, true);
   }
 
-  upsertTemplate(item: KcalTemplateItem): void {
-    const updatedAt = this.#timestamp();
-    const normalizedItem = normalizeTemplateItem(item);
-    this.templates.update((list) => {
-      const idx = list.findIndex((template) => template.id === normalizedItem.id);
-      if (idx >= 0) {
-        const updated = [...list];
-        updated[idx] = normalizedItem;
-        return updated;
-      }
-      return [...list, normalizedItem];
-    });
-    void this.#persistAndPush('template', {
-      entity_table: 'kcal_template_items',
-      ...normalizedItem,
-      deleted: false,
-      client_updated_at: updatedAt,
-    });
-  }
-
-  deleteTemplate(id: string): void {
-    const updatedAt = this.#timestamp();
-    const item = this.templates().find((template) => template.id === id);
-    if (!item) {
-      return;
+  async upsertEntry(entry: KcalEntry): Promise<void> {
+    const normalized = normalizeEntry(entry);
+    if (
+      !Number.isInteger(normalized.kcal_delta) ||
+      normalized.kcal_delta === 0 ||
+      normalized.kcal_delta < -2147483648 ||
+      normalized.kcal_delta > 2147483647 ||
+      !Number.isFinite(Date.parse(normalized.happened_at))
+    ) {
+      throw new Error('Enter nonzero calories within the supported range and a valid date.');
     }
-    this.templates.update((list) => list.filter((template) => template.id !== id));
-    void this.#persistAndPush('template', {
-      entity_table: 'kcal_template_items',
-      ...item,
-      deleted: true,
-      client_updated_at: updatedAt,
-    });
-  }
-
-  upsertEntry(entry: KcalEntry): void {
-    const updatedAt = this.#timestamp();
-    const normalizedEntry = normalizeEntry(entry);
-    this.entries.update((list) => {
-      const idx = list.findIndex((current) => current.id === normalizedEntry.id);
-      if (idx >= 0) {
-        const updated = [...list];
-        updated[idx] = normalizedEntry;
-        return updated;
-      }
-      return [...list, normalizedEntry];
-    });
-    void this.#persistAndPush('entry', {
+    await this.#persist('entry', {
       entity_table: 'kcal_entries',
-      ...normalizedEntry,
+      ...normalized,
       deleted: false,
-      client_updated_at: updatedAt,
+      client_updated_at: this.#timestamp(),
     });
   }
 
-  deleteEntry(id: string): void {
-    const updatedAt = this.#timestamp();
+  async deleteEntry(id: string): Promise<void> {
     const entry = this.entries().find((current) => current.id === id);
-    if (!entry) {
-      return;
+    if (entry) {
+      await this.#persist('entry', {
+        entity_table: 'kcal_entries',
+        ...entry,
+        deleted: true,
+        client_updated_at: this.#timestamp(),
+      });
     }
-    this.entries.update((list) => list.filter((current) => current.id !== id));
-    void this.#persistAndPush('entry', {
-      entity_table: 'kcal_entries',
-      ...entry,
-      deleted: true,
-      client_updated_at: updatedAt,
-    });
   }
 }

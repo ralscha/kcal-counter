@@ -5,6 +5,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { KcalEntry } from '../../core/models/kcal.model';
 import { SyncService } from '../../core/services/sync.service';
+import { ToastService } from '../../core/services/toast.service';
 import { generateUuid } from '../../shared/utils/uuid';
 import {
   kcalExpressionValidator,
@@ -16,19 +17,15 @@ import { HistoryDeleteModalComponent } from './components/history-delete-modal';
 import { HistoryWeekNavComponent } from './components/history-week-nav';
 import { HistoryDay } from './history.models';
 
-function pad(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = startOfDay(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
+import { LocalDateService } from '../../core/services/local-date.service';
+import {
+  startOfDay,
+  addDays,
+  toDateKey,
+  parseDateKey,
+  toLocalDateKey,
+  entriesForDay,
+} from '../../shared/utils/local-date';
 
 function startOfIsoWeek(date: Date): Date {
   const result = startOfDay(date);
@@ -36,19 +33,6 @@ function startOfIsoWeek(date: Date): Date {
   const diff = day === 0 ? -6 : 1 - day;
   result.setDate(result.getDate() + diff);
   return result;
-}
-
-function toDateKey(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function parseDateKey(dateKey: string): Date {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function toLocalDateKey(iso: string): string {
-  return toDateKey(new Date(iso));
 }
 
 function formatDateLabel(date: Date): string {
@@ -108,11 +92,12 @@ export class HistoryComponent {
   readonly #route = inject(ActivatedRoute);
   readonly #router = inject(Router);
   readonly #sync = inject(SyncService);
+  readonly #toast = inject(ToastService);
 
-  readonly #currentWeekStart = startOfIsoWeek(new Date());
-  readonly #todayKey = toDateKey(new Date());
+  readonly #clock = inject(LocalDateService);
+  readonly #currentWeekStart = computed(() => startOfIsoWeek(parseDateKey(this.#clock.today())));
 
-  protected selectedWeekStart = signal(this.#currentWeekStart);
+  protected selectedWeekStart = signal(this.#currentWeekStart());
   protected selectedDay = signal<string | null>(null);
   protected addingDay = signal<string | null>(null);
   protected editingEntry = signal<KcalEntry | null>(null);
@@ -134,7 +119,7 @@ export class HistoryComponent {
   });
 
   protected readonly canGoForward = computed(
-    () => toDateKey(this.selectedWeekStart()) !== toDateKey(this.#currentWeekStart),
+    () => toDateKey(this.selectedWeekStart()) < toDateKey(this.#currentWeekStart()),
   );
 
   protected readonly formDay = computed(() => {
@@ -148,16 +133,14 @@ export class HistoryComponent {
 
   protected readonly days = computed<HistoryDay[]>(() => {
     const start = this.selectedWeekStart();
-    const isCurrentWeek = toDateKey(start) === toDateKey(this.#currentWeekStart);
-    const lastDay = isCurrentWeek ? startOfDay(new Date()) : addDays(start, 6);
+    const isCurrentWeek = toDateKey(start) === toDateKey(this.#currentWeekStart());
+    const lastDay = isCurrentWeek ? parseDateKey(this.#clock.today()) : addDays(start, 6);
     const entries = this.#sync.entries();
     const days: HistoryDay[] = [];
 
     for (let cursor = startOfDay(start); cursor <= lastDay; cursor = addDays(cursor, 1)) {
       const dateKey = toDateKey(cursor);
-      const dayEntries = entries
-        .filter((entry) => toLocalDateKey(entry.happened_at) === dateKey)
-        .sort((left, right) => right.happened_at.localeCompare(left.happened_at));
+      const dayEntries = entriesForDay(entries, dateKey);
 
       days.push({
         dateKey,
@@ -172,6 +155,14 @@ export class HistoryComponent {
   });
 
   constructor() {
+    let previousWeek = toDateKey(this.#currentWeekStart());
+    effect(() => {
+      const currentWeek = toDateKey(this.#currentWeekStart());
+      if (currentWeek !== previousWeek && toDateKey(this.selectedWeekStart()) === previousWeek) {
+        this.selectedWeekStart.set(this.#currentWeekStart());
+      }
+      previousWeek = currentWeek;
+    });
     this.#route.queryParamMap.pipe(takeUntilDestroyed(this.#destroyRef)).subscribe((params) => {
       this.#reviewEntryId.set(params.get('review_entry'));
     });
@@ -279,30 +270,35 @@ export class HistoryComponent {
         kcal_delta: parsedKcal,
         happened_at:
           editing?.happened_at ??
-          buildEntryTimestamp(dateKey, this.entriesForDate(dateKey), this.#todayKey),
+          buildEntryTimestamp(dateKey, this.entriesForDate(dateKey), this.#clock.today()),
       };
 
-      this.#sync.upsertEntry(entry);
+      await this.#sync.upsertEntry(entry);
       this.cancelForm();
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
         const body = error.error as { error?: { message?: string } };
         this.saveError.set(body?.error?.message ?? 'Failed to save entry.');
       } else {
-        this.saveError.set('Failed to save entry.');
+        this.saveError.set(error instanceof Error ? error.message : 'Failed to save entry.');
       }
     } finally {
       this.saveLoading.set(false);
     }
   }
 
-  protected confirmDelete(): void {
+  protected async confirmDelete(): Promise<void> {
     const entry = this.pendingDeleteEntry();
     if (!entry) {
       return;
     }
 
-    this.#sync.deleteEntry(entry.id);
+    try {
+      await this.#sync.deleteEntry(entry.id);
+    } catch {
+      this.#toast.error('Could not delete entry. Please try again.');
+      return;
+    }
     if (this.editingEntry()?.id === entry.id) {
       this.cancelForm();
     }

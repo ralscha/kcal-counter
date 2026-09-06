@@ -7,12 +7,15 @@
     "build": "ng build",
     "compress": "bread-compressor dist/kcal-counter/browser",
     "watch": "ng build --watch --configuration development",
-    "format": "npx prettier --write .",
+    "format": "prettier --write .",
     "lint": "ng lint",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "private": true,
-  "packageManager": "pnpm@12.1.0",
+  "packageManager": "pnpm@12.3.2",
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
   "dependencies": {
     "@angular/common": "22.1.5",
     "@angular/compiler": "22.1.5",
@@ -34,15 +37,17 @@
     "@angular/compiler-cli": "22.1.5",
     "@eslint/js": "10.0.1",
     "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.13.3",
     "angular-eslint": "22.2.0",
     "bread-compressor-cli": "4.1.1",
-    "bun-types": "1.4.0",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
+    "fake-indexeddb": "6.2.5",
     "png-to-ico": "3.0.2",
     "postcss": "8.5.28",
     "prettier": "3.9.6",
     "sharp": "0.35.4",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.69.0"
+    "typescript-eslint": "8.69.0",
+    "vitest": "4.1.11"
   }
 }

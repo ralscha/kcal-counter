@@ -1,10 +1,7 @@
-/// <reference types="bun-types" />
-
-import '@angular/compiler';
 import { DOCUMENT } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Injector, runInInjectionContext } from '@angular/core';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { of } from 'rxjs';
 
 import type { KcalEntry, KcalSyncResponse } from '../models/kcal.model';
@@ -113,9 +110,13 @@ class FakeDbService {
     getKey: (value) => value.id,
   });
 
-  async transaction(_mode: string, ...args: unknown[]): Promise<void> {
-    const callback = args[args.length - 1] as () => Promise<void>;
-    await callback();
+  forUser(): FakeDbService {
+    return this;
+  }
+
+  async transaction<T>(_mode: string, ...args: unknown[]): Promise<T> {
+    const callback = args[args.length - 1] as () => Promise<T>;
+    return callback();
   }
 }
 
@@ -141,11 +142,11 @@ interface HttpCall {
   options?: unknown;
 }
 
-function createService(options: {
+async function createService(options: {
   http: Pick<HttpClient, 'post'>;
   storage: StorageService;
   db: DbService;
-}): SyncService {
+}): Promise<SyncService> {
   const document = {
     visibilityState: 'visible',
     addEventListener: () => undefined,
@@ -159,7 +160,9 @@ function createService(options: {
     ],
   });
 
-  return runInInjectionContext(injector, () => new SyncService());
+  const service = runInInjectionContext(injector, () => new SyncService());
+  await service.setAccount('42');
+  return service;
 }
 
 describe('SyncService', () => {
@@ -185,7 +188,7 @@ describe('SyncService', () => {
         },
       },
     ]);
-    await db.syncState.put({ id: 'pull_snapshot' });
+    await db.syncState.put({ id: 'pull_snapshot', lastSeq: 5 });
     storage.set('device_id', 'device-123');
     storage.set('last_sync_seq', 5);
 
@@ -215,7 +218,7 @@ describe('SyncService', () => {
       },
     };
 
-    const service = createService({
+    const service = await createService({
       http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
@@ -224,7 +227,7 @@ describe('SyncService', () => {
 
     expect(service.entries()).toEqual([localEntry]);
     expect(await db.entries.toArray()).toEqual([localEntry]);
-    expect(storage.get<number>('last_sync_seq')).toBe(6);
+    expect((await db.syncState.get('pull_snapshot'))?.lastSeq).toBe(6);
     expect(postCalls).toHaveLength(1);
     expect((postCalls[0]?.body as { last_sync_seq: number }).last_sync_seq).toBe(5);
     expect((postCalls[0]?.body as { changes: unknown[] }).changes).toEqual([]);
@@ -251,7 +254,7 @@ describe('SyncService', () => {
         },
       },
     ]);
-    await db.syncState.put({ id: 'pull_snapshot' });
+    await db.syncState.put({ id: 'pull_snapshot', lastSeq: 5 });
     storage.set('device_id', 'device-reset');
     storage.set('last_sync_seq', 5);
 
@@ -280,7 +283,7 @@ describe('SyncService', () => {
         } satisfies KcalSyncResponse),
     };
 
-    const service = createService({
+    const service = await createService({
       http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
@@ -294,7 +297,8 @@ describe('SyncService', () => {
       kcal_delta: 100,
       happened_at: '2026-03-23T08:00:00Z',
     });
-    expect(storage.get<number>('last_sync_seq')).toBe(10);
+    expect((await db.syncState.get('pull_snapshot'))?.lastSeq).toBe(10);
+    await service.setAccount(null);
   });
 
   it('flushes the deduplicated offline queue in a single sync request', async () => {
@@ -387,7 +391,7 @@ describe('SyncService', () => {
       },
     };
 
-    const service = createService({
+    const service = await createService({
       http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
@@ -457,7 +461,7 @@ describe('SyncService', () => {
       },
     };
 
-    const service = createService({
+    const service = await createService({
       http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
@@ -509,13 +513,13 @@ describe('SyncService', () => {
         } satisfies KcalSyncResponse),
     };
 
-    const service = createService({
+    const service = await createService({
       http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,
     });
 
-    service.upsertTemplate({
+    await service.upsertTemplate({
       id: 'template-string-kcal',
       kind: 'food',
       name: 'banana',
@@ -583,7 +587,7 @@ describe('SyncService', () => {
         } satisfies KcalSyncResponse),
     };
 
-    const service = createService({
+    const service = await createService({
       http: http as unknown as Pick<HttpClient, 'post'>,
       storage: storage as unknown as StorageService,
       db: db as unknown as DbService,

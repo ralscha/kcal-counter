@@ -11,6 +11,8 @@ import {
 } from '../../shared/components/custom-keypad-input/custom-keypad-input';
 import { ToastService } from '../../core/services/toast.service';
 import { ThemeToggleComponent } from '../../shared/components/theme-toggle/theme-toggle';
+import { DbService, type LegacyDeviceData } from '../../core/services/db.service';
+import { SyncService } from '../../core/services/sync.service';
 
 type SaveState = 'idle' | 'saving';
 
@@ -29,6 +31,11 @@ export class ProfilePageComponent {
   protected readonly integerKeypadRows = INTEGER_KEYPAD_ROWS;
   protected readonly preferencesService = inject(ProfilePreferencesService);
   readonly #toastService = inject(ToastService);
+  readonly #db = inject(DbService);
+  readonly #sync = inject(SyncService);
+  protected readonly previousData = signal<LegacyDeviceData | null>(null);
+  protected readonly ownsPreviousData = signal(false);
+  protected readonly recovering = signal(false);
 
   readonly #destroyRef = inject(DestroyRef);
   readonly #fb = inject(FormBuilder);
@@ -40,6 +47,12 @@ export class ProfilePageComponent {
   });
 
   constructor() {
+    void this.#db
+      .previousDeviceData()
+      .then((data) => this.previousData.set(data))
+      .catch(() => {
+        this.#toastService.error('Could not check for previous device data.');
+      });
     effect(() => {
       if (!this.preferencesService.loaded()) {
         return;
@@ -83,6 +96,39 @@ export class ProfilePageComponent {
   protected async startNewCycle(): Promise<void> {
     this.form.controls.cycleStartDate.setValue(localDateToday());
     await this.save();
+  }
+
+  protected downloadPreviousData(): void {
+    const data = this.previousData();
+    if (!data) {
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'kcal-previous-device-data.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  }
+
+  protected async recoverPreviousData(): Promise<void> {
+    const data = this.previousData();
+    if (!data || !this.ownsPreviousData() || this.recovering()) {
+      return;
+    }
+    this.recovering.set(true);
+    try {
+      await this.#sync.recoverPreviousData(data);
+      await this.preferencesService.load();
+      this.previousData.set(null);
+      this.#toastService.success('Previous device data recovered.');
+    } catch {
+      this.#toastService.error('Could not recover data. The original copy is still saved.');
+    } finally {
+      this.recovering.set(false);
+    }
   }
 
   #getFormPreferences(): ProfilePreferences {

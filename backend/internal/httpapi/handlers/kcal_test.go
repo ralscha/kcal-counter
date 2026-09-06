@@ -109,7 +109,7 @@ func TestKcalHandlerSync(t *testing.T) {
 		handler.Sync(w, r)
 	}))
 
-	body := `{"device_id":"11111111-1111-1111-1111-111111111111","last_sync_seq":3,"changes":[{"entity_table":"kcal_template_items","id":"22222222-2222-2222-2222-222222222222","kind":"food","name":"rice","amount":"100","unit":"grams","kcal_amount":130,"deleted":false,"client_updated_at":"2026-03-23T12:00:00Z"},{"entity_table":"kcal_entries","id":"33333333-3333-3333-3333-333333333333","kcal_delta":260,"happened_at":"2026-03-23T11:58:00Z","deleted":false,"client_updated_at":"2026-03-23T12:01:00Z"}]}`
+	body := `{"user_id":"42","device_id":"11111111-1111-1111-1111-111111111111","last_sync_seq":3,"changes":[{"entity_table":"kcal_template_items","id":"22222222-2222-2222-2222-222222222222","kind":"food","name":"rice","amount":"100","unit":"grams","kcal_amount":130,"deleted":false,"client_updated_at":"2026-03-23T12:00:00Z"},{"entity_table":"kcal_entries","id":"33333333-3333-3333-3333-333333333333","kcal_delta":260,"happened_at":"2026-03-23T11:58:00Z","deleted":false,"client_updated_at":"2026-03-23T12:01:00Z"}]}`
 	recorder := httptest.NewRecorder()
 	protected.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/kcal/sync", strings.NewReader(body)))
 
@@ -149,7 +149,7 @@ func TestKcalHandlerSyncRejectsInvalidDeviceID(t *testing.T) {
 	}))
 
 	recorder := httptest.NewRecorder()
-	protected.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/kcal/sync", strings.NewReader(`{"device_id":"bad","changes":[]}`)))
+	protected.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/kcal/sync", strings.NewReader(`{"user_id":"42","device_id":"bad","changes":[]}`)))
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)

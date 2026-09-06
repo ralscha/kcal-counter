@@ -1,8 +1,10 @@
 import { computed, inject, Service, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { SessionPrincipal } from '../models/user.model';
+import { StorageService } from './storage.service';
+import { SyncService } from './sync.service';
 import {
   prepareAssertionOptions,
   prepareCreationOptions,
@@ -28,24 +30,50 @@ interface PasskeyRegisterEnvelope {
 export class AuthService {
   readonly #http = inject(HttpClient);
   readonly #router = inject(Router);
+  readonly #storage = inject(StorageService);
+  readonly #sync = inject(SyncService);
   readonly #currentUser = signal<SessionPrincipal | null>(null);
   readonly currentUser = this.#currentUser.asReadonly();
   readonly isAuthenticated = computed(() => this.#currentUser() !== null);
 
   async loadCurrentUser(): Promise<void> {
+    let user: SessionPrincipal | null = null;
     try {
       const res = await firstValueFrom(
-        this.#http.get<UserEnvelope>('/api/v1/auth/me', { withCredentials: true }),
+        this.#http.get<UserEnvelope>('/api/v1/auth/me', { withCredentials: true, timeout: 5_000 }),
       );
-      this.#currentUser.set(res.data.user);
-    } catch {
-      this.#currentUser.set(null);
+      user = res.data.user;
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500)) {
+        user = this.#storage.get<SessionPrincipal>('session_user');
+      }
+    }
+    await this.#setCurrentUser(user);
+  }
+
+  async #setCurrentUser(user: SessionPrincipal | null): Promise<void> {
+    // Older cached sessions have no account ID and cannot safely own local data.
+    const principal = user?.user_id ? user : null;
+    await this.#sync.setAccount(principal?.user_id ?? null);
+    this.#currentUser.set(principal);
+    if (principal) {
+      this.#storage.set('session_user', principal);
+    } else {
+      this.#storage.remove('session_user');
     }
   }
 
   async logout(): Promise<void> {
-    await firstValueFrom(this.#http.post('/api/v1/auth/logout', {}, { withCredentials: true }));
-    this.#currentUser.set(null);
+    try {
+      await firstValueFrom(
+        this.#http.post('/api/v1/auth/logout', {}, { withCredentials: true, timeout: 5_000 }),
+      );
+    } catch (error) {
+      if (!(error instanceof HttpErrorResponse) || error.status !== 401) {
+        throw error;
+      }
+    }
+    await this.#setCurrentUser(null);
     await this.#router.navigate(['/auth/login']);
   }
 
@@ -71,7 +99,7 @@ export class AuthService {
         { withCredentials: true },
       ),
     );
-    this.#currentUser.set(finishRes.data.user);
+    await this.#setCurrentUser(finishRes.data.user);
   }
 
   async loginWithPasskey(): Promise<void> {
@@ -98,6 +126,6 @@ export class AuthService {
         { withCredentials: true },
       ),
     );
-    this.#currentUser.set(res.data.user);
+    await this.#setCurrentUser(res.data.user);
   }
 }

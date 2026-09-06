@@ -388,6 +388,22 @@ func TestSyncReturnsResetSnapshotWhenCursorIsTooOld(t *testing.T) {
 	}
 }
 
+func TestSyncResetsCursorAfterServerHistoryIsRestored(t *testing.T) {
+	store := newFakeStore()
+	store.globalVersion = 2
+	entryID := uuid.New()
+	store.entries[entryID] = sqlc.KcalEntry{ID: entryID, UserID: 7, KcalDelta: 100, GlobalVersion: 2}
+	result, err := NewService(store).Sync(context.Background(), 7, SyncInput{
+		DeviceID: uuid.New(), LastSyncVersion: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.ResetRequired || result.LastSyncVersion != 2 {
+		t.Fatalf("result = %+v, want reset to version 2", result)
+	}
+}
+
 func TestSyncAppliesEntryAndAdvancesDeviceCursor(t *testing.T) {
 	store := newFakeStore()
 	service := NewService(store)

@@ -24,7 +24,7 @@ export class RegisterComponent {
     this.error.set('');
     try {
       await this.#auth.registerPasskey();
-      await this.#sync.pull();
+      void this.#sync.pull();
       this.#toast.success('Your passkey is ready to use.', { title: 'Account created' });
       await this.#router.navigate(['/dashboard']);
     } catch (error) {

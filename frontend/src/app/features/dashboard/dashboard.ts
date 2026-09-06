@@ -1,5 +1,4 @@
-import { DOCUMENT } from '@angular/common';
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SyncService } from '../../core/services/sync.service';
@@ -15,17 +14,14 @@ import { DashboardEntryFormModalComponent } from './components/dashboard-entry-f
 import { DashboardSummaryComponent } from './components/dashboard-summary';
 import { DashboardTemplatePickerModalComponent } from './components/dashboard-template-picker-modal';
 
-function pad(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function toDateKey(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function localDateToday(): string {
-  return toDateKey(new Date());
-}
+import { LocalDateService } from '../../core/services/local-date.service';
+import {
+  pad,
+  parseDateKey,
+  toLocalDateKey,
+  entriesForDay,
+  calendarDaysBetween,
+} from '../../shared/utils/local-date';
 
 function formatDisplayDate(dateKey: string): string {
   return parseDateKey(dateKey).toLocaleDateString([], {
@@ -33,21 +29,6 @@ function formatDisplayDate(dateKey: string): string {
     month: 'long',
     day: 'numeric',
   });
-}
-
-function parseDateKey(dateKey: string): Date {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function toLocalDateKey(iso: string): string {
-  return toDateKey(new Date(iso));
 }
 
 function localTimeDefault(): string {
@@ -79,13 +60,12 @@ function toIsoFromLocalDateAndTime(dateKey: string, time: string): string {
   templateUrl: './dashboard.html',
 })
 export class DashboardComponent {
-  readonly #document = inject(DOCUMENT);
-  readonly #destroyRef = inject(DestroyRef);
+  readonly #clock = inject(LocalDateService);
   readonly #fb = inject(FormBuilder);
   readonly #sync = inject(SyncService);
   readonly #preferences = inject(ProfilePreferencesService);
 
-  protected selectedDate = signal(localDateToday());
+  protected readonly selectedDate = this.#clock.today;
   protected showAddForm = signal(false);
   protected showTemplatePicker = signal(false);
   protected addLoading = signal(false);
@@ -103,20 +83,9 @@ export class DashboardComponent {
     happened_at: this.#fb.nonNullable.control(localTimeDefault(), Validators.required),
   });
 
-  protected readonly dateRange = computed(() => {
-    const d = this.selectedDate();
-    const from = new Date(d + 'T00:00:00').toISOString();
-    const to = new Date(d + 'T23:59:59.999').toISOString();
-    return { from, to };
-  });
-
-  protected readonly dayEntries = computed(() => {
-    const { from, to } = this.dateRange();
-    return this.#sync
-      .entries()
-      .filter((e) => e.happened_at >= from && e.happened_at <= to)
-      .sort((a, b) => b.happened_at.localeCompare(a.happened_at));
-  });
+  protected readonly dayEntries = computed(() =>
+    entriesForDay(this.#sync.entries(), this.selectedDate()),
+  );
 
   protected readonly totalKcal = computed(() =>
     this.dayEntries().reduce((sum, e) => sum + e.kcal_delta, 0),
@@ -177,37 +146,17 @@ export class DashboardComponent {
       return null;
     }
 
-    const totalsByDate = new Map<string, number>();
-    for (const entry of this.#sync.entries()) {
+    const total = this.#sync.entries().reduce((sum, entry) => {
       const dateKey = toLocalDateKey(entry.happened_at);
-      if (dateKey < cycleStartDate || dateKey > selectedDate) {
-        continue;
-      }
-
-      totalsByDate.set(dateKey, (totalsByDate.get(dateKey) ?? 0) + entry.kcal_delta);
-    }
-
-    let runningDifference = 0;
-    for (
-      let cursor = parseDateKey(cycleStartDate);
-      toDateKey(cursor) <= selectedDate;
-      cursor = addDays(cursor, 1)
-    ) {
-      const dateKey = toDateKey(cursor);
-      runningDifference += (totalsByDate.get(dateKey) ?? 0) - limit;
-    }
-
-    return runningDifference;
+      return dateKey >= cycleStartDate && dateKey <= selectedDate ? sum + entry.kcal_delta : sum;
+    }, 0);
+    return total - (calendarDaysBetween(cycleStartDate, selectedDate) + 1) * limit;
   });
 
   protected readonly hasCycleStarted = computed(() => {
     const cycleStartDate = this.#preferences.preferences().cycleStartDate;
     return !!cycleStartDate && cycleStartDate <= this.selectedDate();
   });
-
-  constructor() {
-    this.#registerActivityListeners();
-  }
 
   protected openAdd(kind: KcalTemplateKind): void {
     this.editingEntry.set(null);
@@ -324,7 +273,7 @@ export class DashboardComponent {
         kcal_delta: normalizedKcal,
         happened_at: toIsoFromLocalDateAndTime(dateKey, happened_at),
       };
-      this.#sync.upsertEntry(entry);
+      await this.#sync.upsertEntry(entry);
       this.showAddForm.set(false);
       this.showTemplatePicker.set(false);
       this.editingEntry.set(null);
@@ -337,7 +286,7 @@ export class DashboardComponent {
         const body = e.error as { error?: { message?: string } };
         this.addError.set(body?.error?.message ?? 'Failed to save entry.');
       } else {
-        this.addError.set('Failed to save entry.');
+        this.addError.set(e instanceof Error ? e.message : 'Failed to save entry.');
       }
     } finally {
       this.addLoading.set(false);
@@ -403,40 +352,5 @@ export class DashboardComponent {
     }
 
     return parsed;
-  }
-
-  #registerActivityListeners(): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    this.#document.addEventListener('visibilitychange', this.#handleVisibilityChange);
-    window.addEventListener('pageshow', this.#handleAppBecameActive);
-
-    this.#destroyRef.onDestroy(() => {
-      this.#document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
-      window.removeEventListener('pageshow', this.#handleAppBecameActive);
-    });
-  }
-
-  readonly #handleVisibilityChange = (): void => {
-    if (this.#document.visibilityState !== 'visible') {
-      return;
-    }
-
-    this.#syncSelectedDateToToday();
-  };
-
-  readonly #handleAppBecameActive = (): void => {
-    this.#syncSelectedDateToToday();
-  };
-
-  #syncSelectedDateToToday(): void {
-    const today = localDateToday();
-    if (this.selectedDate() === today) {
-      return;
-    }
-
-    this.selectedDate.set(today);
   }
 }

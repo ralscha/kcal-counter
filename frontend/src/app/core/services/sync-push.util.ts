@@ -74,8 +74,8 @@ function normalizeQueuedMutation(mutation: QueuedSyncMutation): QueuedSyncMutati
   };
 }
 
-function compareClientUpdatedAt(left: string, right: string): number {
-  return left.trim().localeCompare(right.trim());
+export function compareClientUpdatedAt(left: string, right: string): number {
+  return Date.parse(left) - Date.parse(right);
 }
 
 export function queuedMutationKey(kind: PendingMutationKind, entityId: string): string {

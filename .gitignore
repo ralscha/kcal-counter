@@ -1,3 +1,4 @@
 .idea
 .vscode
 backend/deploy/postgres/postgres_password.txt
+deployment/postgres_password.txt

@@ -1,6 +1,43 @@
 <div class="mx-auto max-w-4xl p-4 md:p-6">
   <h1 class="mb-6 text-2xl font-bold text-base-content">Profile</h1>
 
+  @if (previousData(); as data) {
+    <section
+      class="card mb-4 border border-warning/30 bg-base-100"
+      aria-label="Previous device data"
+    >
+      <div class="card-body gap-3">
+        <h2 class="card-title">Previous device data</h2>
+        <p class="text-sm">
+          This device has {{ data.pendingMutations.length }} queued changes and saved preferences
+          from an earlier app version. Recover them only if they belong to your current account.
+        </p>
+        <label class="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            [checked]="ownsPreviousData()"
+            (change)="ownsPreviousData.set($any($event.target).checked)"
+          />
+          This data belongs to my account.
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-sm" (click)="downloadPreviousData()">
+            Download backup
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            [disabled]="!ownsPreviousData() || recovering()"
+            (click)="recoverPreviousData()"
+          >
+            {{ recovering() ? 'Recovering...' : 'Recover my data' }}
+          </button>
+        </div>
+      </div>
+    </section>
+  }
+
   <div class="card border border-base-300 bg-base-100">
     <div class="card-body gap-5">
       <form [formGroup]="form" (ngSubmit)="save()" class="flex flex-col gap-4">

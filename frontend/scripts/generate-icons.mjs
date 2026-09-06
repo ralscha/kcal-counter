@@ -2,7 +2,7 @@
  * Generates all favicons and PWA icons for the kcal-counter app from a
  * provided PNG brand image in the repository root.
  *
- * Usage: bun run scripts/generate-icons.mjs
+ * Usage: node scripts/generate-icons.mjs
  */
 
 import sharp from 'sharp';

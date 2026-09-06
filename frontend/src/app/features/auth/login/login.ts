@@ -24,7 +24,7 @@ export class LoginComponent {
     this.error.set('');
     try {
       await this.#auth.loginWithPasskey();
-      await this.#sync.pull();
+      void this.#sync.pull();
       this.#toast.success('You are signed in with your passkey.', { title: 'Signed in' });
       await this.#router.navigate(['/dashboard']);
     } catch (error) {

@@ -184,6 +184,10 @@ func (h KcalHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if err := jsonio.DecodeAndValidate(w, r, &req); err != nil {
 		return
 	}
+	if req.UserID != fmt.Sprint(h.userID(r)) {
+		jsonio.WriteError(w, http.StatusForbidden, "account_mismatch", "Sign in again to sync this account.")
+		return
+	}
 
 	deviceID, _ := uuid.Parse(req.DeviceID)
 	input := kcal.SyncInput{

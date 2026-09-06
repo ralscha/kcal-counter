@@ -16,18 +16,26 @@ export interface ProfilePreferenceRecord {
 
 export interface SyncStateRecord {
   id: string;
+  lastSeq?: number;
+  lastSyncedAt?: string;
 }
 
-@Service()
-export class DbService extends Dexie {
+export interface LegacyDeviceData {
+  templates: KcalTemplateItem[];
+  entries: KcalEntry[];
+  pendingMutations: PendingMutation[];
+  preferences: ProfilePreferenceRecord | undefined;
+}
+
+export class AccountDb extends Dexie {
   templates!: Table<KcalTemplateItem, string>;
   entries!: Table<KcalEntry, string>;
   pendingMutations!: Table<PendingMutation, number>;
   profilePreferences!: Table<ProfilePreferenceRecord, string>;
   syncState!: Table<SyncStateRecord, string>;
 
-  constructor() {
-    super('kcal-counter');
+  constructor(name: string) {
+    super(name);
     this.version(1).stores({
       templates: 'id, kind, name',
       entries: 'id, happened_at',
@@ -41,5 +49,51 @@ export class DbService extends Dexie {
       profilePreferences: 'id',
       syncState: 'id',
     });
+  }
+}
+
+@Service()
+export class DbService {
+  readonly #accounts = new Map<string, AccountDb>();
+
+  forUser(userId: string): AccountDb {
+    let database = this.#accounts.get(userId);
+    if (!database) {
+      database = new AccountDb(`kcal-counter:user:${userId}`);
+      this.#accounts.set(userId, database);
+    }
+    return database;
+  }
+
+  async previousDeviceData(): Promise<LegacyDeviceData | null> {
+    if (!(await Dexie.exists('kcal-counter'))) {
+      return null;
+    }
+    const db = new AccountDb('kcal-counter');
+    try {
+      if (await db.syncState.get('account_recovery_complete')) {
+        return null;
+      }
+      const [templates, entries, pendingMutations, preferences] = await Promise.all([
+        db.templates.toArray(),
+        db.entries.toArray(),
+        db.pendingMutations.toArray(),
+        db.profilePreferences.get('profile'),
+      ]);
+      return pendingMutations.length || preferences
+        ? { templates, entries, pendingMutations, preferences }
+        : null;
+    } finally {
+      db.close();
+    }
+  }
+
+  async markPreviousDataRecovered(): Promise<void> {
+    const db = new AccountDb('kcal-counter');
+    try {
+      await db.syncState.put({ id: 'account_recovery_complete' });
+    } finally {
+      db.close();
+    }
   }
 }

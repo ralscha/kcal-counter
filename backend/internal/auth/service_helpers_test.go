@@ -1,12 +1,29 @@
 package auth
 
 import (
+	"encoding/json"
 	"testing"
 
 	"kcal-counter/internal/store/sqlc"
 
 	wa "github.com/go-webauthn/webauthn/webauthn"
 )
+
+func TestSessionPrincipalIncludesExactAccountID(t *testing.T) {
+	data, err := json.Marshal(SessionPrincipal{UserID: 9007199254740993, Roles: []string{"user"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.UserID != "9007199254740993" {
+		t.Fatalf("user_id = %q, want exact string ID", result.UserID)
+	}
+}
 
 func TestPasskeyUserWebAuthnMethods(t *testing.T) {
 	credential := wa.Credential{ID: []byte("cred-1")}

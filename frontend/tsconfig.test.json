@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["bun-types"]
+    "types": ["node"],
+    "lib": ["ES2024", "DOM"]
   },
   "include": ["src/**/*.test.ts"]
 }

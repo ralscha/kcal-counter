@@ -1,8 +1,7 @@
-/// <reference types="bun-types" />
-
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 
 import {
+  compareClientUpdatedAt,
   buildBatchSyncRequest,
   dedupeQueuedMutations,
   normalizeTemplateAmount,
@@ -10,6 +9,15 @@ import {
 } from './sync-push.util';
 
 describe('sync-push.util', () => {
+  it('compares instants across offsets and fractional timestamp formats', () => {
+    expect(compareClientUpdatedAt('2026-09-06T12:00:00Z', '2026-09-06T12:00:00.001Z')).toBeLessThan(
+      0,
+    );
+    expect(
+      compareClientUpdatedAt('2026-09-06T14:00:00+02:00', '2026-09-06T12:01:00Z'),
+    ).toBeLessThan(0);
+    expect(compareClientUpdatedAt('2026-09-06T12:00:00Z', '2026-09-06T12:00:00.000Z')).toBe(0);
+  });
   it('builds a batched sync request from queued changes', () => {
     const request = buildBatchSyncRequest('device-1', 7, [
       {

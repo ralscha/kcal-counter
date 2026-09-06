@@ -60,7 +60,7 @@ if [ -z "$REPO_URL" ]; then
   exit 1
 fi
 
-for command_name in git go bun systemctl install find cp mv rm chown chmod; do
+for command_name in git go node pnpm systemctl install find cp mv rm chown chmod; do
   require_command "$command_name"
 done
 
@@ -80,9 +80,9 @@ mkdir -p "$BACKEND_BUILD_DIR/bin"
 log "building frontend"
 (
   cd "$FRONTEND_BUILD_DIR"
-  bun install --frozen-lockfile
-  bun run build
-  bun run compress
+  pnpm install --frozen-lockfile
+  pnpm run build
+  pnpm run compress
 )
 
 if [ ! -x "$BACKEND_BUILD_BINARY" ]; then

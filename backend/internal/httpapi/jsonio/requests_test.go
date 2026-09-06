@@ -10,6 +10,19 @@ import (
 )
 
 func TestDecodeJSON(t *testing.T) {
+	for _, suffix := range []string{` {"name":"second"}`, ` true`, ` garbage`, strings.Repeat(" ", 1<<20)} {
+		t.Run("rejects trailing data", func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"first"}`+suffix))
+			var payload map[string]string
+			if err := DecodeJSON(recorder, request, &payload); err == nil {
+				t.Fatal("accepted trailing request data")
+			}
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+		})
+	}
 	t.Run("success", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"Example"}`))

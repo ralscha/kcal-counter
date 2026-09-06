@@ -28,7 +28,7 @@ export const appConfig: ApplicationConfig = {
       inject(ThemeService);
       await auth.loadCurrentUser();
       if (auth.isAuthenticated()) {
-        await sync.pull();
+        void sync.pull();
       }
     }),
   ],

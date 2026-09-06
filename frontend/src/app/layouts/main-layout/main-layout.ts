@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { SyncService } from '../../core/services/sync.service';
+import { ToastService } from '../../core/services/toast.service';
 
 interface NavigationItem {
   route: string;
@@ -24,6 +25,7 @@ export class MainLayoutComponent implements OnInit {
   protected readonly auth = inject(AuthService);
   protected readonly currentUser = this.auth.currentUser;
   protected readonly sync = inject(SyncService);
+  readonly #toast = inject(ToastService);
   readonly #router = inject(Router);
   readonly #destroyRef = inject(DestroyRef);
 
@@ -64,8 +66,12 @@ export class MainLayoutComponent implements OnInit {
       });
   }
 
-  protected signOut(): void {
-    void this.auth.logout();
+  protected async signOut(): Promise<void> {
+    try {
+      await this.auth.logout();
+    } catch {
+      this.#toast.error('Could not sign out. Check your connection and try again.');
+    }
   }
 
   protected toggleMobileNav(): void {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -38,6 +39,7 @@ func TestKcalSyncListTotalAndPullFlow(t *testing.T) {
 	deviceID := "33333333-3333-3333-3333-333333333333"
 
 	syncBody := map[string]any{
+		"user_id":       strconv.FormatInt(user.ID, 10),
 		"device_id":     deviceID,
 		"last_sync_seq": 0,
 		"changes": []map[string]any{
@@ -159,6 +161,7 @@ func TestKcalSyncListTotalAndPullFlow(t *testing.T) {
 	}
 
 	secondSyncResp := mustDoRequest(t, client, newJSONRequest(t, ctx, http.MethodPost, env.server.URL+"/api/v1/kcal/sync", map[string]any{
+		"user_id":       strconv.FormatInt(user.ID, 10),
 		"device_id":     deviceID,
 		"last_sync_seq": syncPayload.Data.LastSyncVersion,
 		"changes":       []map[string]any{},
@@ -198,12 +201,13 @@ func TestKcalSyncAllowsRepeatedZeroCursor(t *testing.T) {
 	env := newIntegrationEnv(t, ctx)
 	client := newCookieClient(t)
 
-	loginKcalTestUser(t, ctx, env, client)
+	user := loginKcalTestUser(t, ctx, env, client)
 
 	deviceID := "33333333-3333-3333-3333-333333333334"
 
 	for range 2 {
 		syncResp := mustDoRequest(t, client, newJSONRequest(t, ctx, http.MethodPost, env.server.URL+"/api/v1/kcal/sync", map[string]any{
+			"user_id":       strconv.FormatInt(user.ID, 10),
 			"device_id":     deviceID,
 			"last_sync_seq": 0,
 			"changes":       []map[string]any{},

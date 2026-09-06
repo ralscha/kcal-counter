@@ -1,5 +1,6 @@
-import { Service, inject, signal } from '@angular/core';
+import { Service, effect, inject, signal } from '@angular/core';
 import { DbService } from './db.service';
+import { AuthService } from './auth.service';
 
 export interface ProfilePreferences {
   kcalLimit: number | null;
@@ -15,6 +16,7 @@ const DEFAULT_PROFILE_PREFERENCES: ProfilePreferences = {
 @Service()
 export class ProfilePreferencesService {
   readonly #db = inject(DbService);
+  readonly #auth = inject(AuthService);
   readonly #preferences = signal<ProfilePreferences>(DEFAULT_PROFILE_PREFERENCES);
   readonly #loaded = signal(false);
 
@@ -22,38 +24,56 @@ export class ProfilePreferencesService {
   readonly loaded = this.#loaded.asReadonly();
 
   constructor() {
-    void this.load();
+    effect(() => {
+      this.#auth.currentUser();
+      void this.load().catch(() => undefined);
+    });
   }
 
   async load(): Promise<void> {
+    const userId = this.#auth.currentUser()?.user_id;
+    this.#loaded.set(false);
+    this.#preferences.set(DEFAULT_PROFILE_PREFERENCES);
     try {
-      const saved = await this.#db.profilePreferences.get(PROFILE_PREFERENCES_ID);
-      if (saved) {
-        this.#preferences.set({
-          kcalLimit: saved.kcalLimit,
-          cycleStartDate: saved.cycleStartDate,
-        });
+      const saved = userId
+        ? await this.#db.forUser(userId).profilePreferences.get(PROFILE_PREFERENCES_ID)
+        : null;
+      if (saved && this.#auth.currentUser()?.user_id === userId) {
+        this.#preferences.set(
+          this.#normalize({
+            kcalLimit: saved.kcalLimit,
+            cycleStartDate: saved.cycleStartDate,
+          }),
+        );
       }
     } finally {
-      this.#loaded.set(true);
+      if (this.#auth.currentUser()?.user_id === userId) {
+        this.#loaded.set(true);
+      }
     }
   }
 
   async save(preferences: ProfilePreferences): Promise<void> {
     const next = this.#normalize(preferences);
-    this.#preferences.set(next);
-    await this.#db.profilePreferences.put({
+    const userId = this.#auth.currentUser()?.user_id;
+    if (!userId) {
+      throw new Error('Sign in before saving preferences.');
+    }
+    await this.#db.forUser(userId).profilePreferences.put({
       id: PROFILE_PREFERENCES_ID,
       kcalLimit: next.kcalLimit,
       cycleStartDate: next.cycleStartDate,
     });
-    this.#loaded.set(true);
+    if (this.#auth.currentUser()?.user_id === userId) {
+      this.#preferences.set(next);
+      this.#loaded.set(true);
+    }
   }
 
   #normalize(preferences: ProfilePreferences): ProfilePreferences {
     return {
       kcalLimit:
-        preferences.kcalLimit == null || Number.isNaN(preferences.kcalLimit)
+        preferences.kcalLimit == null || !Number.isFinite(preferences.kcalLimit)
           ? null
           : Math.max(1, Math.round(preferences.kcalLimit)),
       cycleStartDate: preferences.cycleStartDate || null,

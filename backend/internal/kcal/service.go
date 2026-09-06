@@ -360,7 +360,11 @@ func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (Sync
 			return err
 		}
 
-		if input.LastSyncVersion < meta.MinValidVersion {
+		if input.LastSyncVersion < meta.MinValidVersion || input.LastSyncVersion > meta.CurrentVersion {
+			resetReason := "client cursor is older than the retained tombstone history"
+			if input.LastSyncVersion > meta.CurrentVersion {
+				resetReason = "client cursor is newer than the server history"
+			}
 			snapshotRows, err := txStore.ListSyncSnapshot(ctx, userID)
 			if err != nil {
 				return err
@@ -368,7 +372,7 @@ func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (Sync
 
 			result = SyncResult{
 				ResetRequired:   true,
-				ResetReason:     "client cursor is older than the retained tombstone history",
+				ResetReason:     resetReason,
 				LastSyncVersion: meta.CurrentVersion,
 				MinValidVersion: meta.MinValidVersion,
 				PushResults:     []SyncPushResult{},

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type entryRequest struct {
 }
 
 type syncRequest struct {
+	UserID          string              `json:"user_id"`
 	DeviceID        string              `json:"device_id"`
 	LastSyncVersion int64               `json:"last_sync_seq"`
 	Changes         []syncChangeRequest `json:"changes"`
@@ -96,7 +98,7 @@ func (r syncChangeRequest) validate(err *validation.Errors, index int) {
 		err.NotBlank(prefix+".name", r.Name)
 		err.NotBlank(prefix+".unit", r.Unit)
 		if hasError := err.NotBlank(prefix+".amount", r.Amount); !hasError {
-			if value, parseErr := strconv.ParseFloat(r.Amount, 64); parseErr != nil || value <= 0 {
+			if !isPositiveFiniteAmount(r.Amount) {
 				err.Add(prefix+".amount", "pattern", "positive decimal")
 			}
 		}
@@ -139,7 +141,7 @@ func (r templateItemRequest) Validate() error {
 	err.NotBlank("name", r.Name)
 	err.NotBlank("unit", r.Unit)
 	if hasError := err.NotBlank("amount", r.Amount); !hasError {
-		if value, parseErr := strconv.ParseFloat(r.Amount, 64); parseErr != nil || value <= 0 {
+		if !isPositiveFiniteAmount(r.Amount) {
 			err.Add("amount", "pattern", "positive decimal")
 		}
 	}
@@ -147,6 +149,11 @@ func (r templateItemRequest) Validate() error {
 		err.Add("kcal_amount", "between", 1, 2147483647)
 	}
 	return err.ErrOrNil()
+}
+
+func isPositiveFiniteAmount(amount string) bool {
+	value, err := strconv.ParseFloat(amount, 64)
+	return err == nil && value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func (r templateItemRequest) toInput(id *uuid.UUID) kcal.TemplateItemInput {

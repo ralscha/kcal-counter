@@ -1,6 +1,4 @@
-/// <reference types="bun-types" />
-
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { resolvePullSinceSeq } from './sync-pull.util';
 
 describe('sync-pull.util', () => {
