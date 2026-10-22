@@ -151,8 +151,8 @@ github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 h1:XA01Vk/wv
 github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=
 github.com/pressly/goose/v3 v3.29.0 h1:dtEnBCT7CqkHIUCdgrXsrmeisaN8gFkRU4Y5OEwif4o=
 github.com/pressly/goose/v3 v3.29.0/go.mod h1:plA4aP4+u+Q3FMTgbFbhF8TuAWpAdfWpoFGkJsIFWh0=
-github.com/ralscha/ratelimiter-pg v0.0.0-20261021030026-563721d0f281 h1:aNuj/dD71y5Jm/3/81i4UoAqBz56G2jWLUWHZAtV4uk=
-github.com/ralscha/ratelimiter-pg v0.0.0-20261021030026-563721d0f281/go.mod h1:jN20kqOKZQt5UkzuMI5hJ8IUSP6phGuGa/IW08HlcGk=
+github.com/ralscha/ratelimiter-pg v0.0.0-20261021191802-3024bcbfcbb5 h1:GAmjV2IAYR9SbfVlWNYtZRlFD+ZJS7VRTz7hiP6Bmes=
+github.com/ralscha/ratelimiter-pg v0.0.0-20261021191802-3024bcbfcbb5/go.mod h1:ap5fWdQzBzsnUKecbwUZh9m/kGlwrgc8m7OrldYO7AM=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rogpeppe/go-internal v1.6.1/go.mod h1:xXDCJY+GAPziupqXw64V24skbSoqbTEfhy4qGm1nDQc=

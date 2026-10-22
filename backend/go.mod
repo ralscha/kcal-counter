@@ -15,7 +15,7 @@ require (
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/lib/pq v1.12.3
 	github.com/pressly/goose/v3 v3.29.0
-	github.com/ralscha/ratelimiter-pg v0.0.0-20261021030026-563721d0f281
+	github.com/ralscha/ratelimiter-pg v0.0.0-20261021191802-3024bcbfcbb5
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 )
 
