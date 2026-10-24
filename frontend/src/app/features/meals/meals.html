@@ -56,9 +56,12 @@
             </button>
           </div>
         } @else {
-          <p class="text-sm">
-            Create a <a class="link" routerLink="/templates">food template</a> to add ingredients.
-          </p>
+          <div class="space-y-3">
+            <p class="text-sm">Create a food template to add ingredients.</p>
+            <a class="btn btn-outline w-full sm:w-auto" routerLink="/templates">
+              Create food templates
+            </a>
+          </div>
         }
         <ul class="divide-y divide-base-300">
           @for (item of items(); track $index) {

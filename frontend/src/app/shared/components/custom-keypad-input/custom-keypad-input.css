@@ -13,6 +13,6 @@
 
 .keypad-key,
 .keypad-action {
-  min-height: 2.75rem;
+  min-height: 3rem;
   font-variant-numeric: tabular-nums;
 }

@@ -72,3 +72,26 @@ body {
   height: 100%;
   margin: 0;
 }
+
+/* Keep controls comfortable to tap on phones and devices with a touch screen. */
+@media (width < 48rem), (any-pointer: coarse) {
+  :where(button, a[href], summary) {
+    min-width: 3rem;
+    min-height: 3rem;
+    touch-action: manipulation;
+  }
+
+  .btn {
+    font-size: max(0.875rem, var(--fontsize, 0.875rem));
+    white-space: normal;
+  }
+
+  .btn:not(.btn-circle, .btn-square) {
+    height: auto;
+    padding-block: 0.625rem;
+  }
+
+  summary {
+    align-content: center;
+  }
+}

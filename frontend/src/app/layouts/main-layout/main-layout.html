@@ -150,7 +150,7 @@
           </button>
         </div>
 
-        <nav class="flex flex-col gap-1 p-3">
+        <nav class="flex flex-col gap-1 overflow-y-auto p-3">
           @for (item of navigationItems; track item.route) {
             <a
               [routerLink]="item.route"
@@ -235,7 +235,7 @@
                     <span>{{ detail.message }}</span>
                     @if (detail.routeCommands && detail.reviewLabel) {
                       <a
-                        class="link link-hover ml-2 text-xs font-semibold sm:text-sm"
+                        class="btn btn-outline mt-2 flex w-full sm:inline-flex sm:w-auto"
                         [routerLink]="detail.routeCommands"
                         [queryParams]="detail.queryParams"
                         >{{ detail.reviewLabel }}</a

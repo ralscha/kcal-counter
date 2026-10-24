@@ -84,7 +84,9 @@
             adjusts the current period; clearing it stops the current period without deleting
             archived periods.
           </span>
-          <a routerLink="/trends" fragment="periods" class="link text-sm">View period history</a>
+          <a routerLink="/trends" fragment="periods" class="btn btn-outline w-full sm:w-fit">
+            View period history
+          </a>
           @if (!periodReady()) {
             <span class="text-xs text-base-content/60"
               >Sync this device once to load period history before starting a new period.</span
@@ -150,7 +152,7 @@
                   </button>
                 </div>
               } @else {
-                <div class="flex gap-1">
+                <div class="flex gap-2">
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm"

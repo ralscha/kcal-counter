@@ -64,8 +64,9 @@
     @if (summary().targetDays !== summary().days) {
       <p class="mt-3 text-sm text-base-content/65">
         {{ summary().targetDays }} of {{ summary().days }} days have a target. A period difference
-        needs a target for every day. <a routerLink="/profile" class="link">Manage targets</a>
+        needs a target for every day.
       </p>
+      <a routerLink="/profile" class="btn btn-outline mt-3 w-full sm:w-auto">Manage targets</a>
     }
   </section>
   <section class="rounded-box border border-base-300 bg-base-100 p-4">
@@ -149,9 +150,10 @@
   <section id="periods" class="rounded-box border border-base-300 bg-base-100 p-4">
     <h2 class="font-semibold">Period history</h2>
     <p class="mt-1 text-sm text-base-content/65">
-      Starting a new period in <a routerLink="/profile" class="link">Profile</a> archives the
-      previous date range. Totals reflect your entries and dated targets.
+      Starting a new period in Profile archives the previous date range. Totals reflect your entries
+      and dated targets.
     </p>
+    <a routerLink="/profile" class="btn btn-outline mt-3 w-full sm:w-auto">Manage periods</a>
     @if (periodRows().length) {
       <div class="mt-3 overflow-x-auto">
         <table class="table">

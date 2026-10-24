@@ -2,7 +2,7 @@
   <div class="max-h-[min(52vh,30rem)] overflow-y-auto">
     <ul class="divide-y divide-base-300">
       @for (entry of entries(); track entry.id) {
-        <li class="flex items-center gap-3 px-4 py-3">
+        <li class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
           <button
             type="button"
             class="min-w-0 flex-1 rounded-lg p-1 text-left transition-colors hover:bg-base-200/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
@@ -19,7 +19,7 @@
             </p>
           </button>
 
-          <div class="flex items-center gap-1">
+          <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:shrink-0">
             <button
               type="button"
               class="btn btn-ghost btn-sm"
