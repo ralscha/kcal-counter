@@ -18,6 +18,7 @@ export class HistoryDayDetailsComponent {
   readonly saveLoading = input(false);
   readonly saveError = input('');
   readonly editing = input(false);
+  readonly repeatLoading = input(false);
 
   readonly back = output<void>();
   readonly openAdd = output<string>();
@@ -25,4 +26,5 @@ export class HistoryDayDetailsComponent {
   readonly cancelForm = output<void>();
   readonly saveEntry = output<string>();
   readonly requestDelete = output<KcalEntry>();
+  readonly repeatEntry = output<KcalEntry>();
 }

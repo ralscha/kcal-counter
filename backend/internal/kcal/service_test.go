@@ -14,8 +14,12 @@ import (
 )
 
 type fakeStore struct {
-	templates         map[uuid.UUID]sqlc.KcalTemplateItem
-	entries           map[uuid.UUID]sqlc.KcalEntry
+	targets           map[trackingKey]sqlc.KcalTarget
+	periods           map[trackingKey]sqlc.KcalPeriod
+	meals             map[trackingKey]sqlc.KcalMeal
+	templates         map[trackingKey]sqlc.KcalTemplateItem
+	entries           map[trackingKey]sqlc.KcalEntry
+	periodStarts      map[int64]sqlc.KcalPeriodStart
 	upsertCursorCalls []sqlc.UpsertDeviceSyncStateParams
 	syncLockCalls     int
 	minValidVersion   int64
@@ -27,8 +31,12 @@ type fakeStore struct {
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		templates: map[uuid.UUID]sqlc.KcalTemplateItem{},
-		entries:   map[uuid.UUID]sqlc.KcalEntry{},
+		targets:      map[trackingKey]sqlc.KcalTarget{},
+		periods:      map[trackingKey]sqlc.KcalPeriod{},
+		meals:        map[trackingKey]sqlc.KcalMeal{},
+		templates:    map[trackingKey]sqlc.KcalTemplateItem{},
+		entries:      map[trackingKey]sqlc.KcalEntry{},
+		periodStarts: map[int64]sqlc.KcalPeriodStart{},
 	}
 }
 
@@ -59,7 +67,7 @@ func (f *fakeStore) CreateKcalEntry(_ context.Context, arg sqlc.CreateKcalEntryP
 		GlobalVersion:   f.nextVersion(),
 		DeletedAt:       arg.DeletedAt,
 	}
-	f.entries[arg.ID] = entry
+	f.entries[trackingKey{arg.UserID, arg.ID}] = entry
 	return entry, nil
 }
 
@@ -77,7 +85,7 @@ func (f *fakeStore) CreateKcalTemplateItem(_ context.Context, arg sqlc.CreateKca
 		GlobalVersion:   f.nextVersion(),
 		DeletedAt:       arg.DeletedAt,
 	}
-	f.templates[arg.ID] = item
+	f.templates[trackingKey{arg.UserID, arg.ID}] = item
 	return item, nil
 }
 
@@ -106,7 +114,7 @@ func (f *fakeStore) DeleteExpiredTemplateTombstones(_ context.Context, arg sqlc.
 }
 
 func (f *fakeStore) DeleteKcalEntry(_ context.Context, arg sqlc.DeleteKcalEntryParams) (sqlc.KcalEntry, error) {
-	entry, ok := f.entries[arg.ID]
+	entry, ok := f.entries[trackingKey{arg.UserID, arg.ID}]
 	if !ok || entry.UserID != arg.UserID || entry.DeletedAt.Valid {
 		return sqlc.KcalEntry{}, sql.ErrNoRows
 	}
@@ -114,12 +122,12 @@ func (f *fakeStore) DeleteKcalEntry(_ context.Context, arg sqlc.DeleteKcalEntryP
 	entry.ServerUpdatedAt = arg.ServerUpdatedAt
 	entry.GlobalVersion = f.nextVersion()
 	entry.DeletedAt = sql.NullTime{Time: arg.ServerUpdatedAt, Valid: true}
-	f.entries[arg.ID] = entry
+	f.entries[trackingKey{arg.UserID, arg.ID}] = entry
 	return entry, nil
 }
 
 func (f *fakeStore) DeleteKcalTemplateItem(_ context.Context, arg sqlc.DeleteKcalTemplateItemParams) (sqlc.KcalTemplateItem, error) {
-	item, ok := f.templates[arg.ID]
+	item, ok := f.templates[trackingKey{arg.UserID, arg.ID}]
 	if !ok || item.UserID != arg.UserID || item.DeletedAt.Valid {
 		return sqlc.KcalTemplateItem{}, sql.ErrNoRows
 	}
@@ -127,7 +135,7 @@ func (f *fakeStore) DeleteKcalTemplateItem(_ context.Context, arg sqlc.DeleteKca
 	item.ServerUpdatedAt = arg.ServerUpdatedAt
 	item.GlobalVersion = f.nextVersion()
 	item.DeletedAt = sql.NullTime{Time: arg.ServerUpdatedAt, Valid: true}
-	f.templates[arg.ID] = item
+	f.templates[trackingKey{arg.UserID, arg.ID}] = item
 	return item, nil
 }
 
@@ -136,7 +144,7 @@ func (f *fakeStore) EnsureSyncMetadataRow(context.Context, int64) error {
 }
 
 func (f *fakeStore) GetKcalEntryByID(_ context.Context, arg sqlc.GetKcalEntryByIDParams) (sqlc.KcalEntry, error) {
-	entry, ok := f.entries[arg.ID]
+	entry, ok := f.entries[trackingKey{arg.UserID, arg.ID}]
 	if !ok || entry.UserID != arg.UserID {
 		return sqlc.KcalEntry{}, sql.ErrNoRows
 	}
@@ -147,8 +155,26 @@ func (f *fakeStore) GetKcalEntryForUpdate(ctx context.Context, arg sqlc.GetKcalE
 	return f.GetKcalEntryByID(ctx, sqlc.GetKcalEntryByIDParams(arg))
 }
 
+func (f *fakeStore) GetKcalPeriodStartForUpdate(_ context.Context, userID int64) (sqlc.KcalPeriodStart, error) {
+	period, ok := f.periodStarts[userID]
+	if !ok {
+		return sqlc.KcalPeriodStart{}, sql.ErrNoRows
+	}
+	return period, nil
+}
+
+func (f *fakeStore) UpsertKcalPeriodStart(_ context.Context, arg sqlc.UpsertKcalPeriodStartParams) (sqlc.KcalPeriodStart, error) {
+	period := sqlc.KcalPeriodStart{
+		UserID: arg.UserID, CycleStartDate: arg.CycleStartDate,
+		ClientUpdatedAt: arg.ClientUpdatedAt, ServerUpdatedAt: arg.ServerUpdatedAt,
+		GlobalVersion: f.nextVersion(),
+	}
+	f.periodStarts[arg.UserID] = period
+	return period, nil
+}
+
 func (f *fakeStore) GetKcalTemplateItemByID(_ context.Context, arg sqlc.GetKcalTemplateItemByIDParams) (sqlc.KcalTemplateItem, error) {
-	item, ok := f.templates[arg.ID]
+	item, ok := f.templates[trackingKey{arg.UserID, arg.ID}]
 	if !ok || item.UserID != arg.UserID {
 		return sqlc.KcalTemplateItem{}, sql.ErrNoRows
 	}
@@ -206,6 +232,18 @@ func (f *fakeStore) ListSyncRecordsSince(_ context.Context, arg sqlc.ListSyncRec
 			Deleted:         entry.DeletedAt.Valid,
 		})
 	}
+	if period, ok := f.periodStarts[arg.UserID]; ok && period.GlobalVersion > arg.GlobalVersion {
+		date := sql.NullString{}
+		if period.CycleStartDate.Valid {
+			date = sql.NullString{String: period.CycleStartDate.Time.Format(time.DateOnly), Valid: true}
+		}
+		rows = append(rows, sqlc.ListSyncRecordsSinceRow{
+			EntityTable: EntityTablePeriodStarts, ID: periodStartUUID, CycleStartDate: date,
+			ClientUpdatedAt: period.ClientUpdatedAt, ServerUpdatedAt: period.ServerUpdatedAt,
+			GlobalVersion: period.GlobalVersion,
+		})
+	}
+	rows = append(rows, f.trackingRows(arg.UserID, arg.GlobalVersion)...)
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].GlobalVersion != rows[j].GlobalVersion {
 			return rows[i].GlobalVersion < rows[j].GlobalVersion
@@ -218,59 +256,43 @@ func (f *fakeStore) ListSyncRecordsSince(_ context.Context, arg sqlc.ListSyncRec
 	return rows, nil
 }
 
-func (f *fakeStore) ListSyncSnapshot(_ context.Context, userID int64) ([]sqlc.ListSyncSnapshotRow, error) {
-	rows := make([]sqlc.ListSyncSnapshotRow, 0)
-	for _, item := range f.templates {
-		if item.UserID != userID || item.DeletedAt.Valid {
-			continue
-		}
-		rows = append(rows, sqlc.ListSyncSnapshotRow{
-			EntityTable:     EntityTableTemplateItems,
-			ID:              item.ID,
-			Kind:            string(item.Kind),
-			Name:            item.Name,
-			Amount:          item.Amount,
-			Unit:            item.Unit,
-			KcalAmount:      item.KcalAmount,
-			ClientUpdatedAt: item.ClientUpdatedAt,
-			ServerUpdatedAt: item.ServerUpdatedAt,
-			GlobalVersion:   item.GlobalVersion,
-		})
+func (f *fakeStore) ListSyncSnapshot(ctx context.Context, userID int64) ([]sqlc.ListSyncSnapshotRow, error) {
+	all, err := f.ListSyncRecordsSince(ctx, sqlc.ListSyncRecordsSinceParams{UserID: userID, GlobalVersion: -1})
+	if err != nil {
+		return nil, err
 	}
-	for _, entry := range f.entries {
-		if entry.UserID != userID || entry.DeletedAt.Valid {
-			continue
+	rows := make([]sqlc.ListSyncSnapshotRow, 0, len(all))
+	for _, row := range all {
+		if !row.Deleted {
+			rows = append(rows, sqlc.ListSyncSnapshotRow(row))
 		}
-		rows = append(rows, sqlc.ListSyncSnapshotRow{
-			EntityTable:     EntityTableEntries,
-			ID:              entry.ID,
-			KcalDelta:       sql.NullInt32{Int32: entry.KcalDelta, Valid: true},
-			HappenedAt:      sql.NullTime{Time: entry.HappenedAt, Valid: true},
-			ClientUpdatedAt: entry.ClientUpdatedAt,
-			ServerUpdatedAt: entry.ServerUpdatedAt,
-			GlobalVersion:   entry.GlobalVersion,
-		})
 	}
 	return rows, nil
 }
 
-func (f *fakeStore) ReadSyncMetadata(_ context.Context, _ int64) (sqlc.ReadSyncMetadataRow, error) {
+func (f *fakeStore) ReadSyncMetadata(_ context.Context, userID int64) (sqlc.ReadSyncMetadataRow, error) {
 	currentVersion := f.minValidVersion
 	for _, item := range f.templates {
-		if item.GlobalVersion > currentVersion {
+		if item.UserID == userID && item.GlobalVersion > currentVersion {
 			currentVersion = item.GlobalVersion
 		}
 	}
 	for _, entry := range f.entries {
-		if entry.GlobalVersion > currentVersion {
+		if entry.UserID == userID && entry.GlobalVersion > currentVersion {
 			currentVersion = entry.GlobalVersion
 		}
+	}
+	if period, ok := f.periodStarts[userID]; ok && period.GlobalVersion > currentVersion {
+		currentVersion = period.GlobalVersion
+	}
+	for _, row := range f.trackingRows(userID, -1) {
+		currentVersion = max(currentVersion, row.GlobalVersion)
 	}
 	return sqlc.ReadSyncMetadataRow{CurrentVersion: currentVersion, MinValidVersion: f.minValidVersion}, nil
 }
 
 func (f *fakeStore) UpdateKcalEntry(_ context.Context, arg sqlc.UpdateKcalEntryParams) (sqlc.KcalEntry, error) {
-	entry, ok := f.entries[arg.ID]
+	entry, ok := f.entries[trackingKey{arg.UserID, arg.ID}]
 	if !ok || entry.UserID != arg.UserID {
 		return sqlc.KcalEntry{}, sql.ErrNoRows
 	}
@@ -280,12 +302,12 @@ func (f *fakeStore) UpdateKcalEntry(_ context.Context, arg sqlc.UpdateKcalEntryP
 	entry.ServerUpdatedAt = arg.ServerUpdatedAt
 	entry.DeletedAt = arg.DeletedAt
 	entry.GlobalVersion = f.nextVersion()
-	f.entries[arg.ID] = entry
+	f.entries[trackingKey{arg.UserID, arg.ID}] = entry
 	return entry, nil
 }
 
 func (f *fakeStore) UpdateKcalTemplateItem(_ context.Context, arg sqlc.UpdateKcalTemplateItemParams) (sqlc.KcalTemplateItem, error) {
-	item, ok := f.templates[arg.ID]
+	item, ok := f.templates[trackingKey{arg.UserID, arg.ID}]
 	if !ok || item.UserID != arg.UserID {
 		return sqlc.KcalTemplateItem{}, sql.ErrNoRows
 	}
@@ -298,7 +320,7 @@ func (f *fakeStore) UpdateKcalTemplateItem(_ context.Context, arg sqlc.UpdateKca
 	item.ServerUpdatedAt = arg.ServerUpdatedAt
 	item.DeletedAt = arg.DeletedAt
 	item.GlobalVersion = f.nextVersion()
-	f.templates[arg.ID] = item
+	f.templates[trackingKey{arg.UserID, arg.ID}] = item
 	return item, nil
 }
 
@@ -318,7 +340,7 @@ func TestSyncIgnoresOlderEntryChange(t *testing.T) {
 	entryID := uuid.New()
 	now := time.Now().UTC()
 	store.globalVersion = 5
-	store.entries[entryID] = sqlc.KcalEntry{
+	store.entries[trackingKey{7, entryID}] = sqlc.KcalEntry{
 		ID:              entryID,
 		UserID:          7,
 		KcalDelta:       450,
@@ -357,7 +379,7 @@ func TestSyncReturnsResetSnapshotWhenCursorIsTooOld(t *testing.T) {
 	templateID := uuid.New()
 	now := time.Now().UTC()
 	store.globalVersion = 12
-	store.templates[templateID] = sqlc.KcalTemplateItem{
+	store.templates[trackingKey{7, templateID}] = sqlc.KcalTemplateItem{
 		ID:              templateID,
 		UserID:          7,
 		Kind:            sqlc.KcalTemplateKindFood,
@@ -392,7 +414,7 @@ func TestSyncResetsCursorAfterServerHistoryIsRestored(t *testing.T) {
 	store := newFakeStore()
 	store.globalVersion = 2
 	entryID := uuid.New()
-	store.entries[entryID] = sqlc.KcalEntry{ID: entryID, UserID: 7, KcalDelta: 100, GlobalVersion: 2}
+	store.entries[trackingKey{7, entryID}] = sqlc.KcalEntry{ID: entryID, UserID: 7, KcalDelta: 100, GlobalVersion: 2}
 	result, err := NewService(store).Sync(context.Background(), 7, SyncInput{
 		DeviceID: uuid.New(), LastSyncVersion: 20,
 	})

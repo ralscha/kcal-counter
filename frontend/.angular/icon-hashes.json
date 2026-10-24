@@ -1,0 +1,20 @@
+{
+  "public/icons/apple-touch-icon.png": "ab1df25cdb01dd7231aff18a1d71f034a107cd00ea49052134b2d71703795b6a",
+  "public/icons/icon-128x128.png": "634a91d42a2bf17cfd9225e4c5f408ef01396547bf4ac1ac7bb69a0260aa1faf",
+  "public/icons/icon-144x144.png": "f31171fc26eefc66741e43031e6347f597eb9fe169852682c2d429f7389044c6",
+  "public/icons/icon-152x152.png": "1473d46fb9f25adb26d99dea23c080aeb55c642439de73c7083e3719371c026e",
+  "public/icons/icon-192x192.png": "26fb13f6c7bbf5e02954bdb6780aecd7c481253aa07d8a1f3794ba729813c25c",
+  "public/icons/icon-256x256.png": "4fa45cb460068aba6451f251b15415092ef377d9c61ae7798da53e62dc26980f",
+  "public/icons/icon-384x384.png": "7920f438d75a5d88d9f3bed06fb3437d8ad4dcb179c53fd3981e92570354f5f6",
+  "public/icons/icon-48x48.png": "5783877ab084b8a1a688c91fae2c99dada334994ea2f5bda9e9b89469fe94f50",
+  "public/icons/icon-512x512.png": "e72e9cc8bf885ec64960925648294bb302d9f0c5b9b74676080356b830962531",
+  "public/icons/icon-64x64.png": "5a580be2cfa4f1e1efc6c3a198a9f1e55d2676b0511dd7a50ef340883e25fb02",
+  "public/icons/icon-72x72.png": "3e9caa08e4f52786845c1f08de988738cac629013db23b74fb6b456e96473bbd",
+  "public/icons/icon-96x96.png": "7fe588373f1b8ae98bc4252b39314663fba2e0f161f77a6fcacc207ff07674ff",
+  "public/icons/icon-maskable-192x192.png": "0da23216c93f6d4b32f6ac8ef3ebda494380c148292ae2994a8182ecab9c7a8a",
+  "public/icons/icon-maskable-512x512.png": "3f6cb1a5316a551e4925cf95bae173be5950d74059f127b3fb40e95218fb0338",
+  "public/favicon.ico": "3c7e1157e31a2201ffaa74667be3d9467c8f2d7ab9bbca53afe9e58784cb45e9",
+  "public/favicon-16x16.png": "add623920879a3936563bbc4380c824f381aa8d84b53e584ec6a28d67b375630",
+  "public/favicon-32x32.png": "2453cdddab0af42e4c14db09f7f1bd16bd18c06756578a32c47b69ee21268045",
+  "public/brand-mark.png": "7fe588373f1b8ae98bc4252b39314663fba2e0f161f77a6fcacc207ff07674ff"
+}

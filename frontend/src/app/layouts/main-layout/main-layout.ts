@@ -48,10 +48,25 @@ export class MainLayoutComponent implements OnInit {
       iconPath: 'M4 6h16M4 12h16M4 18h10',
     },
     {
+      route: '/meals',
+      label: 'Saved meals',
+      iconPath: 'M4 4v6a2 2 0 004 0V4M6 4v16m10-16v16m0-16c-4 0-4 9 0 9',
+    },
+    {
+      route: '/trends',
+      label: 'Trends & periods',
+      iconPath: 'M4 4v16h16M7 14l4-4 4 2 5-7',
+    },
+    {
       route: '/profile',
       label: 'Profile',
       iconPath:
         'M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+    },
+    {
+      route: '/backup',
+      label: 'Export & backup',
+      iconPath: 'M12 3v12m-4-4l4 4 4-4M4 15v5h16v-5',
     },
   ];
 

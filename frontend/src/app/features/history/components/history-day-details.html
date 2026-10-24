@@ -63,8 +63,10 @@
     } @else {
       <app-history-entry-list
         [entries]="day().entries"
+        [repeatLoading]="repeatLoading()"
         (openEdit)="openEdit.emit($event)"
         (requestDelete)="requestDelete.emit($event)"
+        (repeatEntry)="repeatEntry.emit($event)"
       />
     }
   }

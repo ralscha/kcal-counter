@@ -14,12 +14,14 @@
       [saveLoading]="saveLoading()"
       [saveError]="saveError()"
       [editing]="!!editingEntry()"
+      [repeatLoading]="repeatLoading()"
       (back)="backToDays()"
       (openAdd)="openAdd($event)"
       (openEdit)="openEdit(day.dateKey, $event)"
       (cancelForm)="cancelForm()"
       (saveEntry)="saveEntry($event)"
       (requestDelete)="requestDelete($event)"
+      (repeatEntry)="repeatEntry($event)"
     />
   } @else {
     <app-history-day-list [days]="days()" (openDay)="openDay($event)" />

@@ -13,15 +13,11 @@ import { normalizeDashboardEntryKcal } from './dashboard-kcal';
 import { DashboardEntryFormModalComponent } from './components/dashboard-entry-form-modal';
 import { DashboardSummaryComponent } from './components/dashboard-summary';
 import { DashboardTemplatePickerModalComponent } from './components/dashboard-template-picker-modal';
+import { QuickLoggingComponent } from './components/quick-logging';
+import { summarizePeriod, targetForDate } from '../../shared/utils/kcal-statistics';
 
 import { LocalDateService } from '../../core/services/local-date.service';
-import {
-  pad,
-  parseDateKey,
-  toLocalDateKey,
-  entriesForDay,
-  calendarDaysBetween,
-} from '../../shared/utils/local-date';
+import { pad, parseDateKey, toLocalDateKey, entriesForDay } from '../../shared/utils/local-date';
 
 function formatDisplayDate(dateKey: string): string {
   return parseDateKey(dateKey).toLocaleDateString([], {
@@ -56,6 +52,7 @@ function toIsoFromLocalDateAndTime(dateKey: string, time: string): string {
     DashboardSummaryComponent,
     DashboardTemplatePickerModalComponent,
     DashboardEntryFormModalComponent,
+    QuickLoggingComponent,
   ],
   templateUrl: './dashboard.html',
 })
@@ -119,7 +116,9 @@ export class DashboardComponent {
 
   protected readonly hasSelectedTemplate = computed(() => this.selectedAddTemplate() !== null);
 
-  protected readonly dailyLimit = computed(() => this.#preferences.preferences().kcalLimit);
+  protected readonly dailyLimit = computed(() =>
+    targetForDate(this.#sync.targets(), this.selectedDate()),
+  );
 
   protected readonly selectedDateLabel = computed(() => formatDisplayDate(this.selectedDate()));
 
@@ -138,24 +137,15 @@ export class DashboardComponent {
   });
 
   protected readonly cycleDifference = computed(() => {
-    const limit = this.dailyLimit();
     const cycleStartDate = this.#preferences.preferences().cycleStartDate;
     const selectedDate = this.selectedDate();
 
-    if (limit == null || !cycleStartDate || cycleStartDate > selectedDate) {
+    if (!cycleStartDate || cycleStartDate > selectedDate) {
       return null;
     }
 
-    const total = this.#sync.entries().reduce((sum, entry) => {
-      const dateKey = toLocalDateKey(entry.happened_at);
-      return dateKey >= cycleStartDate && dateKey <= selectedDate ? sum + entry.kcal_delta : sum;
-    }, 0);
-    return total - (calendarDaysBetween(cycleStartDate, selectedDate) + 1) * limit;
-  });
-
-  protected readonly hasCycleStarted = computed(() => {
-    const cycleStartDate = this.#preferences.preferences().cycleStartDate;
-    return !!cycleStartDate && cycleStartDate <= this.selectedDate();
+    return summarizePeriod(this.#sync.entries(), this.#sync.targets(), cycleStartDate, selectedDate)
+      .difference;
   });
 
   protected openAdd(kind: KcalTemplateKind): void {
@@ -244,6 +234,9 @@ export class DashboardComponent {
   }
 
   protected async saveEntry(): Promise<void> {
+    if (this.addLoading()) {
+      return;
+    }
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -274,13 +267,7 @@ export class DashboardComponent {
         happened_at: toIsoFromLocalDateAndTime(dateKey, happened_at),
       };
       await this.#sync.upsertEntry(entry);
-      this.showAddForm.set(false);
-      this.showTemplatePicker.set(false);
-      this.editingEntry.set(null);
-      this.addTemplateKind.set(null);
-      this.selectedAddTemplate.set(null);
-      this.templateSearchQuery.set('');
-      this.templateAmountInput.set('');
+      this.cancelAdd();
     } catch (e) {
       if (e instanceof HttpErrorResponse) {
         const body = e.error as { error?: { message?: string } };

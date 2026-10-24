@@ -103,6 +103,7 @@ export class HistoryComponent {
   protected editingEntry = signal<KcalEntry | null>(null);
   protected pendingDeleteEntry = signal<KcalEntry | null>(null);
   protected saveLoading = signal(false);
+  protected repeatLoading = signal(false);
   protected saveError = signal('');
   readonly #reviewEntryId = signal<string | null>(null);
   readonly #handledReviewEntryId = signal<string | null>(null);
@@ -247,6 +248,9 @@ export class HistoryComponent {
   }
 
   protected async saveEntry(dateKey: string): Promise<void> {
+    if (this.saveLoading()) {
+      return;
+    }
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -303,6 +307,21 @@ export class HistoryComponent {
       this.cancelForm();
     }
     this.pendingDeleteEntry.set(null);
+  }
+
+  protected async repeatEntry(entry: KcalEntry): Promise<void> {
+    if (this.repeatLoading()) {
+      return;
+    }
+    this.repeatLoading.set(true);
+    try {
+      await this.#sync.repeatEntry(entry.id, this.#clock.today());
+      this.#toast.success('Entry repeated today.');
+    } catch (error) {
+      this.#toast.error(error instanceof Error ? error.message : 'Could not repeat entry.');
+    } finally {
+      this.repeatLoading.set(false);
+    }
   }
 
   private entriesForDate(dateKey: string): KcalEntry[] {

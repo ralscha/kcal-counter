@@ -3,6 +3,7 @@ package kcal
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,13 +17,30 @@ import (
 const (
 	EntityTableTemplateItems = "kcal_template_items"
 	EntityTableEntries       = "kcal_entries"
+	EntityTablePeriodStarts  = "kcal_period_starts"
+	EntityTableTargets       = "kcal_targets"
+	EntityTablePeriods       = "kcal_periods"
+	EntityTableMeals         = "kcal_meals"
+	PeriodStartID            = "00000000-0000-0000-0000-000000000001"
 	tombstoneRetention       = 30 * 24 * time.Hour
 	syncTransactionLockKey   = 0x4b43414c0001
 )
 
 var ErrInvalidTemplateKind = errors.New("invalid template kind")
 
+var periodStartUUID = uuid.MustParse(PeriodStartID)
+
 type Store interface {
+	GetKcalTargetForUpdate(context.Context, sqlc.GetKcalTargetForUpdateParams) (sqlc.KcalTarget, error)
+	UpsertKcalTarget(context.Context, sqlc.UpsertKcalTargetParams) (sqlc.KcalTarget, error)
+	DeleteExpiredTargetTombstones(context.Context, sqlc.DeleteExpiredTargetTombstonesParams) ([]int64, error)
+	GetKcalPeriodForUpdate(context.Context, sqlc.GetKcalPeriodForUpdateParams) (sqlc.KcalPeriod, error)
+	UpsertKcalPeriod(context.Context, sqlc.UpsertKcalPeriodParams) (sqlc.KcalPeriod, error)
+	DeleteExpiredPeriodTombstones(context.Context, sqlc.DeleteExpiredPeriodTombstonesParams) ([]int64, error)
+	GetKcalMealForUpdate(context.Context, sqlc.GetKcalMealForUpdateParams) (sqlc.KcalMeal, error)
+	UpsertKcalMeal(context.Context, sqlc.UpsertKcalMealParams) (sqlc.KcalMeal, error)
+	DeleteExpiredMealTombstones(context.Context, sqlc.DeleteExpiredMealTombstonesParams) ([]int64, error)
+
 	AcquireSyncLock(context.Context, int64) error
 	BumpMinValidVersion(context.Context, sqlc.BumpMinValidVersionParams) error
 	CreateKcalEntry(context.Context, sqlc.CreateKcalEntryParams) (sqlc.KcalEntry, error)
@@ -34,6 +52,7 @@ type Store interface {
 	EnsureSyncMetadataRow(context.Context, int64) error
 	GetKcalEntryByID(context.Context, sqlc.GetKcalEntryByIDParams) (sqlc.KcalEntry, error)
 	GetKcalEntryForUpdate(context.Context, sqlc.GetKcalEntryForUpdateParams) (sqlc.KcalEntry, error)
+	GetKcalPeriodStartForUpdate(context.Context, int64) (sqlc.KcalPeriodStart, error)
 	GetKcalTemplateItemByID(context.Context, sqlc.GetKcalTemplateItemByIDParams) (sqlc.KcalTemplateItem, error)
 	GetKcalTemplateItemForUpdate(context.Context, sqlc.GetKcalTemplateItemForUpdateParams) (sqlc.KcalTemplateItem, error)
 	GetKcalTotalInRange(context.Context, sqlc.GetKcalTotalInRangeParams) (int64, error)
@@ -45,6 +64,7 @@ type Store interface {
 	UpdateKcalEntry(context.Context, sqlc.UpdateKcalEntryParams) (sqlc.KcalEntry, error)
 	UpdateKcalTemplateItem(context.Context, sqlc.UpdateKcalTemplateItemParams) (sqlc.KcalTemplateItem, error)
 	UpsertDeviceSyncState(context.Context, sqlc.UpsertDeviceSyncStateParams) error
+	UpsertKcalPeriodStart(context.Context, sqlc.UpsertKcalPeriodStartParams) (sqlc.KcalPeriodStart, error)
 	WithTx(context.Context, func(Store) error) error
 }
 
@@ -82,7 +102,18 @@ type EntryInput struct {
 	HappenedAt time.Time
 }
 
+type MealItem struct {
+	TemplateID uuid.UUID `json:"template_id"`
+	Name       string    `json:"name"`
+	KcalDelta  int32     `json:"kcal_delta"`
+}
+
 type SyncRecord struct {
+	EffectiveFrom   string     `json:"effective_from,omitempty"`
+	KcalLimit       *int32     `json:"kcal_limit"`
+	StartDate       string     `json:"start_date,omitempty"`
+	EndDate         string     `json:"end_date,omitempty"`
+	Items           []MealItem `json:"items,omitempty"`
 	EntityTable     string     `json:"entity_table"`
 	ID              uuid.UUID  `json:"id"`
 	Kind            string     `json:"kind,omitempty"`
@@ -92,6 +123,7 @@ type SyncRecord struct {
 	KcalAmount      int32      `json:"kcal_amount,omitempty"`
 	KcalDelta       int32      `json:"kcal_delta,omitempty"`
 	HappenedAt      *time.Time `json:"happened_at,omitempty"`
+	CycleStartDate  *string    `json:"cycle_start_date"`
 	Deleted         bool       `json:"deleted"`
 	ClientUpdatedAt time.Time  `json:"client_updated_at"`
 	GlobalVersion   int64      `json:"global_version,omitempty"`
@@ -370,19 +402,32 @@ func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (Sync
 				return err
 			}
 
+			snapshot, err := syncSnapshotRowsToRecords(snapshotRows)
+			if err != nil {
+				return err
+			}
+
 			result = SyncResult{
 				ResetRequired:   true,
 				ResetReason:     resetReason,
 				LastSyncVersion: meta.CurrentVersion,
 				MinValidVersion: meta.MinValidVersion,
 				PushResults:     []SyncPushResult{},
-				PullChanges:     syncSnapshotRowsToRecords(snapshotRows),
+				PullChanges:     snapshot,
 			}
 			return nil
 		}
 
 		pushResults := make([]SyncPushResult, 0, len(input.Changes))
-		for _, change := range input.Changes {
+		periodConflicts, err := projectPeriodChanges(ctx, txStore, userID, input.Changes)
+		if err != nil {
+			return err
+		}
+		for index, change := range input.Changes {
+			if authoritative, conflicted := periodConflicts[index]; conflicted {
+				pushResults = append(pushResults, SyncPushResult{Record: authoritative})
+				continue
+			}
 			pushResult, err := applyClientChange(ctx, txStore, userID, change)
 			if err != nil {
 				return err
@@ -411,12 +456,17 @@ func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (Sync
 			return err
 		}
 
+		pullChanges, err := syncRowsToRecords(pullRows)
+		if err != nil {
+			return err
+		}
+
 		result = SyncResult{
 			ResetRequired:   false,
 			LastSyncVersion: meta.CurrentVersion,
 			MinValidVersion: meta.MinValidVersion,
 			PushResults:     pushResults,
-			PullChanges:     syncRowsToRecords(pullRows),
+			PullChanges:     pullChanges,
 		}
 		return nil
 	})
@@ -426,11 +476,8 @@ func (s *Service) Sync(ctx context.Context, userID int64, input SyncInput) (Sync
 
 func applyClientChange(ctx context.Context, store Store, userID int64, change SyncRecord) (SyncPushResult, error) {
 	normalized := normalizeSyncRecord(change)
-	if normalized.ID == uuid.Nil {
-		return SyncPushResult{}, errors.New("sync change id is required")
-	}
-	if normalized.ClientUpdatedAt.IsZero() {
-		return SyncPushResult{}, fmt.Errorf("sync change %s is missing client_updated_at", normalized.ID)
+	if err := validateSyncIdentity(normalized); err != nil {
+		return SyncPushResult{}, err
 	}
 
 	switch normalized.EntityTable {
@@ -438,9 +485,58 @@ func applyClientChange(ctx context.Context, store Store, userID int64, change Sy
 		return applyTemplateChange(ctx, store, userID, normalized)
 	case EntityTableEntries:
 		return applyEntryChange(ctx, store, userID, normalized)
+	case EntityTablePeriodStarts:
+		return applyPeriodStartChange(ctx, store, userID, normalized)
+	case EntityTableTargets:
+		return applyTargetChange(ctx, store, userID, normalized)
+	case EntityTablePeriods:
+		return applyPeriodChange(ctx, store, userID, normalized)
+	case EntityTableMeals:
+		return applyMealChange(ctx, store, userID, normalized)
 	default:
 		return SyncPushResult{}, fmt.Errorf("unsupported entity_table %q", change.EntityTable)
 	}
+}
+
+func applyPeriodStartChange(ctx context.Context, store Store, userID int64, change SyncRecord) (SyncPushResult, error) {
+	if err := validatePeriodStartChange(change); err != nil {
+		return SyncPushResult{}, err
+	}
+	date, err := ParseCycleStartDate(change.CycleStartDate)
+	if err != nil {
+		return SyncPushResult{}, err
+	}
+
+	current, err := store.GetKcalPeriodStartForUpdate(ctx, userID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return SyncPushResult{}, err
+	}
+	if err == nil && change.ClientUpdatedAt.Before(current.ClientUpdatedAt) {
+		return SyncPushResult{Applied: false, Record: syncRecordFromPeriodStart(current)}, nil
+	}
+
+	stored, err := store.UpsertKcalPeriodStart(ctx, sqlc.UpsertKcalPeriodStartParams{
+		UserID:          userID,
+		CycleStartDate:  date,
+		ClientUpdatedAt: change.ClientUpdatedAt.UTC(),
+		ServerUpdatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		return SyncPushResult{}, err
+	}
+	return SyncPushResult{Applied: true, Record: syncRecordFromPeriodStart(stored)}, nil
+}
+
+// ParseCycleStartDate preserves a calendar date without applying a time zone.
+func ParseCycleStartDate(value *string) (sql.NullTime, error) {
+	if value == nil {
+		return sql.NullTime{}, nil
+	}
+	date, err := time.Parse(time.DateOnly, *value)
+	if err != nil || date.Year() < 1 || date.Format(time.DateOnly) != *value {
+		return sql.NullTime{}, errors.New("cycle_start_date must be a valid YYYY-MM-DD date or null")
+	}
+	return sql.NullTime{Time: date, Valid: true}, nil
 }
 
 func applyTemplateChange(ctx context.Context, store Store, userID int64, change SyncRecord) (SyncPushResult, error) {
@@ -572,15 +668,23 @@ func compactExpiredDeletes(ctx context.Context, store Store, userID int64, now t
 		return err
 	}
 
-	maxPurgedVersion := int64(0)
-	for _, version := range templateVersions {
-		if version > maxPurgedVersion {
-			maxPurgedVersion = version
-		}
+	targetVersions, err := store.DeleteExpiredTargetTombstones(ctx, sqlc.DeleteExpiredTargetTombstonesParams{UserID: userID, ServerUpdatedAt: cutoff})
+	if err != nil {
+		return err
 	}
-	for _, version := range entryVersions {
-		if version > maxPurgedVersion {
-			maxPurgedVersion = version
+	periodVersions, err := store.DeleteExpiredPeriodTombstones(ctx, sqlc.DeleteExpiredPeriodTombstonesParams{UserID: userID, ServerUpdatedAt: cutoff})
+	if err != nil {
+		return err
+	}
+	mealVersions, err := store.DeleteExpiredMealTombstones(ctx, sqlc.DeleteExpiredMealTombstonesParams{UserID: userID, ServerUpdatedAt: cutoff})
+	if err != nil {
+		return err
+	}
+
+	maxPurgedVersion := int64(0)
+	for _, versions := range [][]int64{templateVersions, entryVersions, targetVersions, periodVersions, mealVersions} {
+		for _, version := range versions {
+			maxPurgedVersion = max(maxPurgedVersion, version)
 		}
 	}
 	if maxPurgedVersion == 0 {
@@ -647,20 +751,28 @@ func deletedAtForChange(deleted bool, now time.Time) sql.NullTime {
 	return sql.NullTime{Time: now.UTC(), Valid: true}
 }
 
-func syncRowsToRecords(rows []sqlc.ListSyncRecordsSinceRow) []SyncRecord {
+func syncRowsToRecords(rows []sqlc.ListSyncRecordsSinceRow) ([]SyncRecord, error) {
 	records := make([]SyncRecord, 0, len(rows))
 	for _, row := range rows {
-		records = append(records, syncRecordFromListRow(row))
+		record, err := syncRecordFromListRow(row)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
-	return records
+	return records, nil
 }
 
-func syncSnapshotRowsToRecords(rows []sqlc.ListSyncSnapshotRow) []SyncRecord {
+func syncSnapshotRowsToRecords(rows []sqlc.ListSyncSnapshotRow) ([]SyncRecord, error) {
 	records := make([]SyncRecord, 0, len(rows))
 	for _, row := range rows {
-		records = append(records, syncRecordFromSnapshotRow(row))
+		record, err := syncRecordFromListRow(sqlc.ListSyncRecordsSinceRow(row))
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
-	return records
+	return records, nil
 }
 
 func syncRecordFromTemplateItem(item sqlc.KcalTemplateItem) SyncRecord {
@@ -695,60 +807,57 @@ func syncRecordFromEntry(item sqlc.KcalEntry) SyncRecord {
 	}
 }
 
-func syncRecordFromListRow(row sqlc.ListSyncRecordsSinceRow) SyncRecord {
+func syncRecordFromPeriodStart(item sqlc.KcalPeriodStart) SyncRecord {
+	serverUpdatedAt := item.ServerUpdatedAt.UTC()
 	record := SyncRecord{
-		EntityTable:     row.EntityTable,
-		ID:              row.ID,
-		Deleted:         row.Deleted,
-		ClientUpdatedAt: row.ClientUpdatedAt.UTC(),
-		GlobalVersion:   row.GlobalVersion,
+		EntityTable:     EntityTablePeriodStarts,
+		ID:              periodStartUUID,
+		ClientUpdatedAt: item.ClientUpdatedAt.UTC(),
+		GlobalVersion:   item.GlobalVersion,
+		ServerUpdatedAt: &serverUpdatedAt,
 	}
-	serverUpdatedAt := row.ServerUpdatedAt.UTC()
-	record.ServerUpdatedAt = &serverUpdatedAt
-
-	if row.EntityTable == EntityTableTemplateItems {
-		record.Kind = row.Kind
-		record.Name = row.Name
-		record.Amount = row.Amount
-		record.Unit = row.Unit
-		record.KcalAmount = row.KcalAmount
-		return record
-	}
-
-	record.KcalDelta = row.KcalDelta.Int32
-	if row.HappenedAt.Valid {
-		happenedAt := row.HappenedAt.Time.UTC()
-		record.HappenedAt = &happenedAt
+	if item.CycleStartDate.Valid {
+		date := item.CycleStartDate.Time.Format(time.DateOnly)
+		record.CycleStartDate = &date
 	}
 	return record
 }
 
-func syncRecordFromSnapshotRow(row sqlc.ListSyncSnapshotRow) SyncRecord {
-	record := SyncRecord{
-		EntityTable:     row.EntityTable,
-		ID:              row.ID,
-		Deleted:         row.Deleted,
-		ClientUpdatedAt: row.ClientUpdatedAt.UTC(),
-		GlobalVersion:   row.GlobalVersion,
-	}
+func syncRecordFromListRow(row sqlc.ListSyncRecordsSinceRow) (SyncRecord, error) {
 	serverUpdatedAt := row.ServerUpdatedAt.UTC()
-	record.ServerUpdatedAt = &serverUpdatedAt
-
-	if row.EntityTable == EntityTableTemplateItems {
-		record.Kind = row.Kind
-		record.Name = row.Name
-		record.Amount = row.Amount
-		record.Unit = row.Unit
+	record := SyncRecord{
+		EntityTable: row.EntityTable, ID: row.ID, Deleted: row.Deleted,
+		ClientUpdatedAt: row.ClientUpdatedAt.UTC(), GlobalVersion: row.GlobalVersion,
+		ServerUpdatedAt: &serverUpdatedAt,
+	}
+	switch row.EntityTable {
+	case EntityTablePeriodStarts:
+		if row.CycleStartDate.Valid {
+			record.CycleStartDate = &row.CycleStartDate.String
+		}
+	case EntityTableTemplateItems:
+		record.Kind, record.Name, record.Amount, record.Unit = row.Kind, row.Name, row.Amount, row.Unit
 		record.KcalAmount = row.KcalAmount
-		return record
+	case EntityTableEntries:
+		record.KcalDelta = row.KcalDelta.Int32
+		if row.HappenedAt.Valid {
+			happenedAt := row.HappenedAt.Time.UTC()
+			record.HappenedAt = &happenedAt
+		}
+	case EntityTableTargets:
+		record.EffectiveFrom = row.EffectiveFrom.String
+		if row.KcalLimit.Valid {
+			record.KcalLimit = &row.KcalLimit.Int32
+		}
+	case EntityTablePeriods:
+		record.StartDate, record.EndDate = row.StartDate.String, row.EndDate.String
+	case EntityTableMeals:
+		record.Name = row.Name
+		if err := json.Unmarshal(row.Items, &record.Items); err != nil {
+			return SyncRecord{}, fmt.Errorf("decode stored meal %s: %w", row.ID, err)
+		}
 	}
-
-	record.KcalDelta = row.KcalDelta.Int32
-	if row.HappenedAt.Valid {
-		happenedAt := row.HappenedAt.Time.UTC()
-		record.HappenedAt = &happenedAt
-	}
-	return record
+	return record, nil
 }
 
 func mapTemplateItem(item sqlc.KcalTemplateItem) TemplateItem {

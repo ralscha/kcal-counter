@@ -132,6 +132,9 @@ export class TemplatesComponent {
   }
 
   protected async save(): Promise<void> {
+    if (this.formLoading()) {
+      return;
+    }
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

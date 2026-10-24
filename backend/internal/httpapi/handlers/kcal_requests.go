@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"fmt"
-	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +11,13 @@ import (
 
 	"kcal-counter/internal/kcal"
 	"kcal-counter/internal/validation"
+)
+
+var templateAmountPattern = regexp.MustCompile(`^\+?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$`)
+
+const (
+	minTemplateAmount = 0.001
+	maxTemplateAmount = 999999999.999
 )
 
 type templateItemRequest struct {
@@ -34,17 +41,23 @@ type syncRequest struct {
 }
 
 type syncChangeRequest struct {
-	EntityTable     string     `json:"entity_table"`
-	ID              string     `json:"id"`
-	Kind            string     `json:"kind"`
-	Name            string     `json:"name"`
-	Amount          string     `json:"amount"`
-	Unit            string     `json:"unit"`
-	KcalAmount      int32      `json:"kcal_amount"`
-	KcalDelta       int32      `json:"kcal_delta"`
-	HappenedAt      *time.Time `json:"happened_at"`
-	Deleted         bool       `json:"deleted"`
-	ClientUpdatedAt time.Time  `json:"client_updated_at"`
+	EffectiveFrom   string          `json:"effective_from"`
+	KcalLimit       *int32          `json:"kcal_limit"`
+	StartDate       string          `json:"start_date"`
+	EndDate         string          `json:"end_date"`
+	Items           []kcal.MealItem `json:"items"`
+	EntityTable     string          `json:"entity_table"`
+	ID              string          `json:"id"`
+	Kind            string          `json:"kind"`
+	Name            string          `json:"name"`
+	Amount          string          `json:"amount"`
+	Unit            string          `json:"unit"`
+	KcalAmount      int32           `json:"kcal_amount"`
+	KcalDelta       int32           `json:"kcal_delta"`
+	HappenedAt      *time.Time      `json:"happened_at"`
+	CycleStartDate  *string         `json:"cycle_start_date"`
+	Deleted         bool            `json:"deleted"`
+	ClientUpdatedAt time.Time       `json:"client_updated_at"`
 }
 
 func (r *syncRequest) Normalize() {
@@ -97,11 +110,7 @@ func (r syncChangeRequest) validate(err *validation.Errors, index int) {
 		}
 		err.NotBlank(prefix+".name", r.Name)
 		err.NotBlank(prefix+".unit", r.Unit)
-		if hasError := err.NotBlank(prefix+".amount", r.Amount); !hasError {
-			if !isPositiveFiniteAmount(r.Amount) {
-				err.Add(prefix+".amount", "pattern", "positive decimal")
-			}
-		}
+		validateTemplateAmount(err, prefix+".amount", r.Amount)
 		if r.KcalAmount <= 0 {
 			err.Add(prefix+".kcal_amount", "between", 1, 2147483647)
 		}
@@ -112,8 +121,22 @@ func (r syncChangeRequest) validate(err *validation.Errors, index int) {
 		if r.KcalDelta == 0 {
 			err.Add(prefix+".kcal_delta", "between", -2147483648, 2147483647)
 		}
+	case kcal.EntityTablePeriodStarts:
+		if r.ID != kcal.PeriodStartID {
+			err.Add(prefix+".id", "pattern", kcal.PeriodStartID)
+		}
+		if r.Deleted {
+			err.Add(prefix+".deleted", "pattern", "false; use a null cycle_start_date to clear the date")
+		}
+		if _, parseErr := kcal.ParseCycleStartDate(r.CycleStartDate); parseErr != nil {
+			err.Add(prefix+".cycle_start_date", "pattern", "YYYY-MM-DD")
+		}
+	case kcal.EntityTableTargets, kcal.EntityTablePeriods, kcal.EntityTableMeals:
+		if trackingErr := kcal.ValidateTrackingChange(r.toSyncRecord()); trackingErr != nil {
+			err.Add(prefix, "pattern", trackingErr.Error())
+		}
 	default:
-		err.In(prefix+".entity_table", r.EntityTable, kcal.EntityTableTemplateItems, kcal.EntityTableEntries)
+		err.In(prefix+".entity_table", r.EntityTable, kcal.EntityTableTemplateItems, kcal.EntityTableEntries, kcal.EntityTablePeriodStarts, kcal.EntityTableTargets, kcal.EntityTablePeriods, kcal.EntityTableMeals)
 	}
 }
 
@@ -121,7 +144,7 @@ func validateUUID(err *validation.Errors, field, value string) {
 	if hasError := err.NotBlank(field, value); hasError {
 		return
 	}
-	if _, parseErr := uuid.Parse(value); parseErr != nil {
+	if parsed, parseErr := uuid.Parse(value); parseErr != nil || parsed == uuid.Nil {
 		err.Add(field, "pattern", "uuid")
 	}
 }
@@ -140,20 +163,27 @@ func (r templateItemRequest) Validate() error {
 	}
 	err.NotBlank("name", r.Name)
 	err.NotBlank("unit", r.Unit)
-	if hasError := err.NotBlank("amount", r.Amount); !hasError {
-		if !isPositiveFiniteAmount(r.Amount) {
-			err.Add("amount", "pattern", "positive decimal")
-		}
-	}
+	validateTemplateAmount(err, "amount", r.Amount)
 	if r.KcalAmount <= 0 {
 		err.Add("kcal_amount", "between", 1, 2147483647)
 	}
 	return err.ErrOrNil()
 }
 
-func isPositiveFiniteAmount(amount string) bool {
-	value, err := strconv.ParseFloat(amount, 64)
-	return err == nil && value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+func validateTemplateAmount(err *validation.Errors, field, amount string) {
+	if err.NotBlank(field, amount) {
+		return
+	}
+	if !templateAmountPattern.MatchString(amount) {
+		err.Add(field, "pattern", "positive decimal")
+		return
+	}
+	value, parseErr := strconv.ParseFloat(amount, 64)
+	// Match the database's NUMERIC(12,3) range so invalid amounts cannot
+	// turn an otherwise valid template or sync request into a database error.
+	if parseErr != nil || value < minTemplateAmount || value > maxTemplateAmount {
+		err.Add(field, "between", minTemplateAmount, maxTemplateAmount)
+	}
 }
 
 func (r templateItemRequest) toInput(id *uuid.UUID) kcal.TemplateItemInput {
@@ -184,4 +214,15 @@ func (r entryRequest) Validate() error {
 
 func (r entryRequest) toInput(id *uuid.UUID) kcal.EntryInput {
 	return kcal.EntryInput{ID: id, KcalDelta: r.KcalDelta, HappenedAt: r.HappenedAt}
+}
+
+func (r syncChangeRequest) toSyncRecord() kcal.SyncRecord {
+	id, _ := uuid.Parse(r.ID)
+	return kcal.SyncRecord{
+		EntityTable: r.EntityTable, ID: id, Kind: r.Kind, Name: r.Name, Amount: r.Amount, Unit: r.Unit,
+		KcalAmount: r.KcalAmount, KcalDelta: r.KcalDelta, HappenedAt: r.HappenedAt,
+		CycleStartDate: r.CycleStartDate, EffectiveFrom: r.EffectiveFrom, KcalLimit: r.KcalLimit,
+		StartDate: r.StartDate, EndDate: r.EndDate, Items: r.Items,
+		Deleted: r.Deleted, ClientUpdatedAt: r.ClientUpdatedAt,
+	}
 }

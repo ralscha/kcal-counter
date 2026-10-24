@@ -1,0 +1,160 @@
+<div class="mx-auto flex max-w-4xl flex-col gap-5 p-4 pb-28 md:p-6 md:pb-32">
+  <div class="space-y-1">
+    <h1 class="text-2xl font-semibold text-base-content">Backup and export</h1>
+    <p class="text-sm text-base-content/60">
+      Keep a copy of your data or analyze it in a spreadsheet.
+    </p>
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-error" role="alert">{{ error() }}</div>
+  }
+
+  <section class="card border border-base-300 bg-base-100" aria-labelledby="backup-export-title">
+    <div class="card-body gap-4">
+      <h2 id="backup-export-title" class="card-title">Full JSON backup</h2>
+      <p class="text-sm text-base-content/70">
+        Includes entries, templates, dated targets, archived periods, the active period start, and
+        saved meals. Changes waiting to sync are included. Your sign-in details are excluded.
+      </p>
+      <div>
+        <button
+          class="btn btn-primary"
+          type="button"
+          [disabled]="!ready() || importing()"
+          (click)="download('json')"
+        >
+          Download backup
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100" aria-labelledby="backup-csv-title">
+    <div class="card-body gap-4">
+      <h2 id="backup-csv-title" class="card-title">Spreadsheet exports</h2>
+      <p class="text-sm text-base-content/70">
+        CSV dates use this device’s time zone. Daily totals include days without entries between
+        your first and last logged day. Differences use the target effective on each date; a blank
+        difference means no target was set.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="btn btn-outline btn-sm"
+          type="button"
+          [disabled]="!ready() || importing()"
+          (click)="download('entries')"
+        >
+          Entries CSV
+        </button>
+        <button
+          class="btn btn-outline btn-sm"
+          type="button"
+          [disabled]="!ready() || importing()"
+          (click)="download('daily')"
+        >
+          Daily totals CSV
+        </button>
+        <button
+          class="btn btn-outline btn-sm"
+          type="button"
+          [disabled]="!ready() || importing()"
+          (click)="download('templates')"
+        >
+          Templates CSV
+        </button>
+        <button
+          class="btn btn-outline btn-sm"
+          type="button"
+          [disabled]="!ready() || importing()"
+          (click)="download('periods')"
+        >
+          Archived periods CSV
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100" aria-labelledby="backup-import-title">
+    <div class="card-body gap-4">
+      <h2 id="backup-import-title" class="card-title">Import a JSON backup</h2>
+      <p id="backup-file-help" class="text-sm text-base-content/70">
+        Select a backup to review before merging. Maximum file size: 10 MB.
+      </p>
+      <label for="backup-file" class="text-sm font-medium">Backup file</label>
+      <input
+        id="backup-file"
+        type="file"
+        accept=".json,application/json"
+        class="file-input file-input-bordered w-full"
+        aria-describedby="backup-file-help"
+        [disabled]="!ready() || importing()"
+        (change)="selectFile($event)"
+      />
+
+      @if (reading()) {
+        <p role="status">Reading {{ fileName() }}…</p>
+        <button type="button" class="btn btn-ghost btn-sm self-start" (click)="cancelImport()">
+          Cancel
+        </button>
+      }
+
+      @if (preview(); as backup) {
+        <div class="space-y-4 rounded-xl bg-base-200 p-4">
+          <h3 class="font-semibold">Review {{ fileName() }}</h3>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <caption class="sr-only">
+                Records to add or replace from the backup
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Data</th>
+                  <th scope="col">In file</th>
+                  <th scope="col">New</th>
+                  <th scope="col">Matching IDs</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (count of backup.counts; track count.label) {
+                  <tr>
+                    <th scope="row">{{ count.label }}</th>
+                    <td>{{ count.total }}</td>
+                    <td>{{ count.added }}</td>
+                    <td>{{ count.replaced }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="text-sm">
+            Active period start:
+            <strong>{{ backup.document.data.active_period_start ?? 'Not set (cleared)' }}</strong>
+          </p>
+          <p class="text-sm text-base-content/70">
+            Records with matching IDs will use the backup values. Other existing records are kept.
+            The active period start will use the value shown above.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="importing() || !ready()"
+              (click)="confirmImport()"
+            >
+              {{ importing() ? 'Importing…' : 'Merge backup' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="importing()"
+              (click)="cancelImport()"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+</div>

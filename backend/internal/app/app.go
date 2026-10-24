@@ -55,8 +55,6 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	sessions, sessionDB := newSessionManager(pgxPool, cfg)
-
 	authService, err := auth.NewService(ctx, db, pgxPool, cfg)
 	if err != nil {
 		pgxPool.Close()
@@ -66,12 +64,9 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 
 	kcalService := kcal.NewService(kcal.NewStore(db))
 
-	jobScheduler := scheduler.Start(ctx, logger, db, authService, cfg)
-
 	roleCache := cache.New[int64](cfg.Security.AuthorizationCacheTTL, func(v []string) []string {
 		return append([]string(nil), v...)
 	})
-	jobScheduler.RegisterSweeper(roleCache.Sweep)
 
 	loginLimiter := ratelimit.New(pgxPool, "public", ratelimit.BucketConfig{
 		Capacity:        10,
@@ -84,6 +79,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("init login rate limiter: %w", err)
 	}
+
+	// Start background workers only after all fallible initialization succeeds.
+	sessions, sessionDB := newSessionManager(pgxPool, cfg)
+	jobScheduler := scheduler.Start(ctx, logger, db, authService, cfg)
+	jobScheduler.RegisterSweeper(roleCache.Sweep)
 
 	handler := httpapi.NewRouter(db, sessions, authService, kcalService, loginLimiter, roleCache, logger, cfg)
 	server := &http.Server{
@@ -107,7 +107,16 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}, nil
 }
 
-func (a *App) Run(ctx context.Context) error {
+func (a *App) Run(ctx context.Context) (runErr error) {
+	defer func() {
+		a.scheduler.Stop()
+		if a.sessionDB != nil {
+			a.sessionDB.StopCleanup()
+		}
+		a.pgxPool.Close()
+		runErr = errors.Join(runErr, a.db.Close())
+	}()
+
 	errCh := make(chan error, 1)
 	go func() {
 		a.logger.Info("http server listening", slog.String("address", a.server.Addr))
@@ -123,25 +132,13 @@ func (a *App) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), a.config.HTTP.ShutdownTimeout)
 		defer cancel()
 		if err := a.server.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("shutdown server: %w", err)
+			// Shutdown leaves active connections open when its deadline expires.
+			// Close them before releasing resources used by their handlers.
+			return errors.Join(fmt.Errorf("shutdown server: %w", err), a.server.Close())
 		}
-		a.scheduler.Stop()
-		if a.sessionDB != nil {
-			a.sessionDB.StopCleanup()
-		}
-		a.pgxPool.Close()
-		return a.db.Close()
+		return nil
 	case err := <-errCh:
-		a.scheduler.Stop()
-		if a.sessionDB != nil {
-			a.sessionDB.StopCleanup()
-		}
-		a.pgxPool.Close()
-		closeErr := a.db.Close()
-		if err != nil {
-			return err
-		}
-		return closeErr
+		return err
 	}
 }
 

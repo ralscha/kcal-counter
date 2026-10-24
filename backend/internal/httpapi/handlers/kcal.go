@@ -196,20 +196,7 @@ func (h KcalHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		Changes:         make([]kcal.SyncRecord, 0, len(req.Changes)),
 	}
 	for _, change := range req.Changes {
-		changeID, _ := uuid.Parse(change.ID)
-		input.Changes = append(input.Changes, kcal.SyncRecord{
-			EntityTable:     change.EntityTable,
-			ID:              changeID,
-			Kind:            change.Kind,
-			Name:            change.Name,
-			Amount:          change.Amount,
-			Unit:            change.Unit,
-			KcalAmount:      change.KcalAmount,
-			KcalDelta:       change.KcalDelta,
-			HappenedAt:      change.HappenedAt,
-			Deleted:         change.Deleted,
-			ClientUpdatedAt: change.ClientUpdatedAt,
-		})
+		input.Changes = append(input.Changes, change.toSyncRecord())
 	}
 
 	result, err := h.Service.Sync(r.Context(), h.userID(r), input)

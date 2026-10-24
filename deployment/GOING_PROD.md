@@ -292,7 +292,7 @@ The deploy script clones a fresh checkout into `/opt/kcal-counter/build`, builds
 
 Before you run it, make sure:
 
-- `git`, `go`, `node`, `pnpm`, and `systemctl` are installed on the server
+- `git`, `go`, `node`, `pnpm`, and `systemctl` are installed on the server; Go matches `backend/go.mod`, and Node.js and pnpm match the `engines` and `packageManager` fields in `frontend/package.json`
 - the `kcal-counter` system user and group already exist
 - `/opt/kcal-counter/backend/config/config.yaml` already contains your production config
 - `REPO_URL` points at the repository the server is allowed to clone

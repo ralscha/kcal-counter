@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDaysBetween, entriesForDay, parseDateKey, addDays } from './local-date';
+import { calendarDaysBetween, entriesForDay, parseDateKey, addDays, isDateKey } from './local-date';
 
 describe('local dates', () => {
+  it('validates calendar dates without accepting rollover, timestamps, or year zero', () => {
+    for (const date of ['0001-01-01', '2024-02-29', '2026-10-22', '9999-12-31']) {
+      expect(isDateKey(date)).toBe(true);
+    }
+    for (const date of [
+      '0000-01-01',
+      '2026-02-29',
+      '2026-04-31',
+      '2026-1-1',
+      '2026-01-01T00:00:00Z',
+    ]) {
+      expect(isDateKey(date)).toBe(false);
+    }
+  });
+
   it('includes midnight regardless of fractional seconds or UTC offset formatting', () => {
     const midnight = parseDateKey('2026-09-06');
     const start = midnight.toISOString();

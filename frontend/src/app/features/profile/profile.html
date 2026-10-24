@@ -1,43 +1,6 @@
 <div class="mx-auto max-w-4xl p-4 md:p-6">
   <h1 class="mb-6 text-2xl font-bold text-base-content">Profile</h1>
 
-  @if (previousData(); as data) {
-    <section
-      class="card mb-4 border border-warning/30 bg-base-100"
-      aria-label="Previous device data"
-    >
-      <div class="card-body gap-3">
-        <h2 class="card-title">Previous device data</h2>
-        <p class="text-sm">
-          This device has {{ data.pendingMutations.length }} queued changes and saved preferences
-          from an earlier app version. Recover them only if they belong to your current account.
-        </p>
-        <label class="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            class="checkbox checkbox-sm"
-            [checked]="ownsPreviousData()"
-            (change)="ownsPreviousData.set($any($event.target).checked)"
-          />
-          This data belongs to my account.
-        </label>
-        <div class="flex flex-wrap gap-2">
-          <button type="button" class="btn btn-sm" (click)="downloadPreviousData()">
-            Download backup
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            [disabled]="!ownsPreviousData() || recovering()"
-            (click)="recoverPreviousData()"
-          >
-            {{ recovering() ? 'Recovering...' : 'Recover my data' }}
-          </button>
-        </div>
-      </div>
-    </section>
-  }
-
   <div class="card border border-base-300 bg-base-100">
     <div class="card-body gap-5">
       <form [formGroup]="form" (ngSubmit)="save()" class="flex flex-col gap-4">
@@ -51,7 +14,7 @@
 
         <div class="flex flex-col gap-2">
           <label class="text-sm font-medium text-base-content" for="profile-kcal-limit">
-            Daily kcal limit
+            Daily kcal target
           </label>
           <app-custom-keypad-input
             inputId="profile-kcal-limit"
@@ -67,10 +30,10 @@
                 : '')
             "
             placeholder="2200"
-            ariaLabel="Daily kcal limit"
+            ariaLabel="Daily kcal target"
           />
           <span class="text-xs text-base-content/60">
-            Leave blank if you do not want a local target.
+            Syncs across your devices. Leave blank to disable the target from the effective date.
           </span>
           @if (form.controls.kcalLimit.touched && form.controls.kcalLimit.hasError('min')) {
             <span id="profile-kcal-limit-help" class="text-xs text-error"
@@ -84,22 +47,54 @@
         </div>
 
         <label class="flex flex-col gap-2">
-          <span class="text-sm font-medium text-base-content">Cycle start date</span>
+          <span class="text-sm font-medium">Target effective from</span>
+          <input
+            type="date"
+            class="input input-bordered w-full sm:max-w-xs"
+            formControlName="targetEffectiveFrom"
+            (change)="refreshTarget()"
+          />
+          <span class="text-xs text-base-content/60"
+            >Earlier days keep their previous target. You can also schedule a future change.</span
+          >
+        </label>
+
+        <label class="flex flex-col gap-2">
+          <span class="text-sm font-medium text-base-content">Current period start date</span>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               type="date"
               class="input input-bordered w-full sm:max-w-xs"
               formControlName="cycleStartDate"
+              [readonly]="saveState() === 'saving'"
             />
             <button
               type="button"
               class="btn btn-outline btn-sm sm:shrink-0"
+              [disabled]="
+                saveState() === 'saving' || !preferencesService.loaded() || !periodReady()
+              "
               (click)="startNewCycle()"
             >
-              Start new cycle
+              Start new period today
             </button>
           </div>
+          <span class="text-xs text-base-content/60">
+            Starting a new period archives the current period through yesterday. Editing this date
+            adjusts the current period; clearing it stops the current period without deleting
+            archived periods.
+          </span>
+          <a routerLink="/trends" fragment="periods" class="link text-sm">View period history</a>
+          @if (!periodReady()) {
+            <span class="text-xs text-base-content/60"
+              >Sync this device once to load period history before starting a new period.</span
+            >
+          }
         </label>
+
+        @if (error()) {
+          <p role="alert" class="text-sm text-error">{{ error() }}</p>
+        }
 
         <div
           class="flex flex-col gap-3 border-t border-base-300 pt-4 sm:flex-row sm:items-center sm:justify-end"
@@ -117,6 +112,68 @@
           </button>
         </div>
       </form>
+
+      <section class="border-t border-base-300 pt-4">
+        <h2 class="font-semibold">Target history</h2>
+        <p class="mt-1 text-xs text-base-content/60">
+          Each target applies until the next change. Editing or removing a past target recalculates
+          statistics for those dates.
+        </p>
+        <ul class="mt-3 divide-y divide-base-300">
+          @for (target of targets(); track target.id) {
+            <li class="flex flex-wrap items-center justify-between gap-2 py-3">
+              <div class="text-sm">
+                <span class="font-medium">{{ target.effective_from }}</span> ·
+                {{
+                  target.kcal_limit === null ? 'Target disabled' : target.kcal_limit + ' kcal/day'
+                }}
+                @if (target.effective_from > today()) {
+                  <span class="badge badge-sm">Scheduled</span>
+                }
+              </div>
+              @if (pendingDeleteTarget()?.id === target.id) {
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm">Remove this change?</span
+                  ><button
+                    type="button"
+                    class="btn btn-error btn-sm"
+                    [disabled]="saveState() === 'saving'"
+                    (click)="deleteTarget()"
+                  >
+                    Remove</button
+                  ><button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    (click)="pendingDeleteTarget.set(null)"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              } @else {
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    [disabled]="saveState() === 'saving'"
+                    (click)="editTarget(target)"
+                  >
+                    Edit</button
+                  ><button
+                    type="button"
+                    class="btn btn-ghost btn-sm text-error"
+                    [disabled]="saveState() === 'saving'"
+                    (click)="pendingDeleteTarget.set(target)"
+                  >
+                    Remove
+                  </button>
+                </div>
+              }
+            </li>
+          } @empty {
+            <li class="py-3 text-sm text-base-content/60">No targets saved yet.</li>
+          }
+        </ul>
+      </section>
     </div>
   </div>
 </div>

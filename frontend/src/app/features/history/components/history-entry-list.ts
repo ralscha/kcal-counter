@@ -8,9 +8,11 @@ import { KcalEntry } from '../../../core/models/kcal.model';
 })
 export class HistoryEntryListComponent {
   readonly entries = input.required<KcalEntry[]>();
+  readonly repeatLoading = input(false);
 
   readonly openEdit = output<KcalEntry>();
   readonly requestDelete = output<KcalEntry>();
+  readonly repeatEntry = output<KcalEntry>();
 
   protected formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

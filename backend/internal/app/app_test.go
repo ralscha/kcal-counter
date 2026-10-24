@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,7 +103,104 @@ func TestNewSessionManagerConfiguresCookieAndSameSite(t *testing.T) {
 			if store == nil {
 				t.Fatal("store = nil, want store instance")
 			}
+			t.Cleanup(store.StopCleanup)
 		})
+	}
+}
+
+func TestRunClosesResourcesWhenShutdownTimesOut(t *testing.T) {
+	const databaseURL = "postgres://localhost:1/kcal_counter?sslmode=disable"
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	pool, err := pgxpool.New(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	requestStarted := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	application := &App{
+		logger:  slog.Default(),
+		config:  config.Config{HTTP: config.HTTPConfig{ShutdownTimeout: 20 * time.Millisecond}},
+		db:      db,
+		pgxPool: pool,
+		server: &http.Server{
+			Addr:              address,
+			ReadHeaderTimeout: time.Second,
+			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				close(requestStarted)
+				<-r.Context().Done()
+				close(requestCanceled)
+			}),
+		},
+	}
+	t.Cleanup(func() { _ = application.server.Close() })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runResult := make(chan error, 1)
+	go func() { runResult <- application.Run(ctx) }()
+
+	clientDone := make(chan struct{})
+	go func() {
+		defer close(clientDone)
+		client := &http.Client{Timeout: 5 * time.Second}
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			response, requestErr := client.Get("http://" + address)
+			if response != nil {
+				_ = response.Body.Close()
+			}
+			select {
+			case <-requestStarted:
+				return
+			default:
+			}
+			if requestErr == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not receive the request")
+	}
+	cancel()
+	select {
+	case runErr := <-runResult:
+		if !errors.Is(runErr, context.DeadlineExceeded) {
+			t.Fatalf("Run() error = %v, want shutdown deadline", runErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not finish after shutdown timed out")
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("active request was not canceled")
+	}
+	<-clientDone
+	if err := db.PingContext(t.Context()); err == nil || !strings.Contains(err.Error(), "database is closed") {
+		t.Fatalf("database remained open: %v", err)
+	}
+	if connection, err := pool.Acquire(t.Context()); err == nil {
+		connection.Release()
+		t.Fatal("connection pool remained open")
 	}
 }
 

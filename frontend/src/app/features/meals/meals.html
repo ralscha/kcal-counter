@@ -1,0 +1,167 @@
+<div class="mx-auto flex max-w-4xl flex-col gap-5 p-4 md:p-6">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold">Saved meals</h1>
+      <p class="mt-1 text-sm text-base-content/65">
+        Combine food templates and log the whole meal in one step.
+      </p>
+    </div>
+    @if (!showForm()) {
+      <button type="button" class="btn btn-primary btn-sm" [disabled]="busy()" (click)="open()">
+        Create meal
+      </button>
+    }
+  </div>
+  @if (showForm()) {
+    <form
+      [formGroup]="form"
+      (ngSubmit)="save()"
+      class="flex flex-col gap-4 rounded-box border border-base-300 bg-base-100 p-4"
+    >
+      <fieldset class="contents" [disabled]="busy()">
+        <h2 class="font-semibold">{{ editingId() ? 'Edit meal' : 'Create meal' }}</h2>
+        <label class="flex flex-col gap-1"
+          ><span class="text-sm">Meal name</span
+          ><input
+            class="input input-bordered w-full"
+            formControlName="name"
+            maxlength="400"
+            placeholder="Breakfast"
+        /></label>
+        @if (templates().length) {
+          <div class="grid gap-3 sm:grid-cols-[1fr_8rem_auto] sm:items-end">
+            <label class="flex flex-col gap-1"
+              ><span class="text-sm">Food template</span
+              ><select class="select select-bordered w-full" formControlName="templateId">
+                <option value="">Choose a food</option>
+                @for (item of templates(); track item.id) {
+                  <option [value]="item.id">
+                    {{ item.name }} · {{ item.kcal_amount }} kcal / {{ item.amount }}
+                    {{ item.unit }}
+                  </option>
+                }
+              </select></label
+            >
+            <label class="flex flex-col gap-1"
+              ><span class="text-sm">Portions</span
+              ><input
+                class="input input-bordered w-full"
+                type="number"
+                step="any"
+                min="0.01"
+                formControlName="servings"
+            /></label>
+            <button type="button" class="btn btn-outline" [disabled]="busy()" (click)="addItem()">
+              Add food
+            </button>
+          </div>
+        } @else {
+          <p class="text-sm">
+            Create a <a class="link" routerLink="/templates">food template</a> to add ingredients.
+          </p>
+        }
+        <ul class="divide-y divide-base-300">
+          @for (item of items(); track $index) {
+            <li class="flex items-center justify-between gap-3 py-2">
+              <span>{{ item.name }} · {{ item.kcal_delta }} kcal</span
+              ><button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                [disabled]="busy()"
+                (click)="removeItem($index)"
+                [attr.aria-label]="'Remove ' + item.name"
+              >
+                Remove
+              </button>
+            </li>
+          }
+        </ul>
+        <p class="font-semibold">Total: {{ total() }} kcal</p>
+        <p class="text-xs text-base-content/60">
+          Meals keep the portions and calories you save here. Later template edits do not change
+          saved meals or logged entries.
+        </p>
+        @if (error()) {
+          <p role="alert" class="text-sm text-error">{{ error() }}</p>
+        }
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            [disabled]="busy()"
+            (click)="showForm.set(false)"
+          >
+            Cancel</button
+          ><button type="submit" class="btn btn-primary" [disabled]="busy()">
+            {{ busy() ? 'Saving…' : 'Save meal' }}
+          </button>
+        </div>
+      </fieldset>
+    </form>
+  } @else {
+    @for (meal of meals(); track meal.id) {
+      <section class="rounded-box border border-base-300 bg-base-100 p-4">
+        <div class="flex flex-wrap justify-between gap-2">
+          <h2 class="font-semibold">{{ meal.name }}</h2>
+          <span class="tabular-nums">{{ mealTotal(meal) }} kcal</span>
+        </div>
+        <ul class="my-3 space-y-1 text-sm text-base-content/65">
+          @for (item of meal.items; track $index) {
+            <li>{{ item.name }} · {{ item.kcal_delta }} kcal</li>
+          }
+        </ul>
+        @if (pendingDelete()?.id === meal.id) {
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-sm">Delete this saved meal? Logged entries are kept.</p>
+            <button
+              type="button"
+              class="btn btn-error btn-sm"
+              [disabled]="busy()"
+              (click)="deleteMeal()"
+            >
+              Delete meal</button
+            ><button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="busy()"
+              (click)="pendingDelete.set(null)"
+            >
+              Cancel
+            </button>
+          </div>
+        } @else {
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="busy()"
+              (click)="log(meal)"
+            >
+              Add to today</button
+            ><button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="busy()"
+              (click)="open(meal)"
+            >
+              Edit</button
+            ><button
+              type="button"
+              class="btn btn-ghost btn-sm text-error"
+              [disabled]="busy()"
+              (click)="pendingDelete.set(meal)"
+            >
+              Delete
+            </button>
+          </div>
+        }
+      </section>
+    } @empty {
+      <p
+        class="rounded-box border border-dashed border-base-300 p-6 text-center text-base-content/60"
+      >
+        No saved meals yet. Create one from your food templates.
+      </p>
+    }
+  }
+</div>

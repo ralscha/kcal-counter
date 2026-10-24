@@ -1,6 +1,6 @@
-import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import {
   ProfilePreferencesService,
   type ProfilePreferences,
@@ -11,123 +11,157 @@ import {
 } from '../../shared/components/custom-keypad-input/custom-keypad-input';
 import { ToastService } from '../../core/services/toast.service';
 import { ThemeToggleComponent } from '../../shared/components/theme-toggle/theme-toggle';
-import { DbService, type LegacyDeviceData } from '../../core/services/db.service';
+import { isDateKey } from '../../shared/utils/local-date';
+import { targetForDate } from '../../shared/utils/kcal-statistics';
 import { SyncService } from '../../core/services/sync.service';
+import { LocalDateService } from '../../core/services/local-date.service';
+import type { KcalTarget } from '../../core/models/kcal.model';
 
 type SaveState = 'idle' | 'saving';
 
-function localDateToday(): string {
-  const today = new Date();
-  const offset = today.getTimezoneOffset();
-  return new Date(today.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
-
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, ThemeToggleComponent, CustomKeypadInputComponent],
+  imports: [ReactiveFormsModule, ThemeToggleComponent, CustomKeypadInputComponent, RouterLink],
   templateUrl: './profile.html',
 })
 export class ProfilePageComponent {
   protected readonly integerKeypadRows = INTEGER_KEYPAD_ROWS;
   protected readonly preferencesService = inject(ProfilePreferencesService);
   readonly #toastService = inject(ToastService);
-  readonly #db = inject(DbService);
-  readonly #sync = inject(SyncService);
-  protected readonly previousData = signal<LegacyDeviceData | null>(null);
-  protected readonly ownsPreviousData = signal(false);
-  protected readonly recovering = signal(false);
-
-  readonly #destroyRef = inject(DestroyRef);
   readonly #fb = inject(FormBuilder);
+  readonly #sync = inject(SyncService);
+  protected readonly today = inject(LocalDateService).today;
+  protected readonly periodReady = computed(() => this.#sync.lastSyncedAt() !== null);
+  protected readonly targets = computed(() =>
+    this.#sync
+      .targets()
+      .slice()
+      .sort((a, b) => b.effective_from.localeCompare(a.effective_from)),
+  );
+  protected readonly pendingDeleteTarget = signal<KcalTarget | null>(null);
+  protected readonly error = signal('');
 
   protected readonly saveState = signal<SaveState>('idle');
   protected readonly form = this.#fb.nonNullable.group({
-    kcalLimit: ['', [Validators.min(1)]],
+    kcalLimit: this.#fb.control<string | null>('', [
+      Validators.min(1),
+      Validators.max(2147483647),
+      Validators.pattern(/^\d*$/),
+    ]),
+    targetEffectiveFrom: [this.today(), Validators.required],
     cycleStartDate: [''],
   });
 
   constructor() {
-    void this.#db
-      .previousDeviceData()
-      .then((data) => this.previousData.set(data))
-      .catch(() => {
-        this.#toastService.error('Could not check for previous device data.');
-      });
     effect(() => {
       if (!this.preferencesService.loaded()) {
         return;
       }
 
       const preferences = this.preferencesService.preferences();
-      this.form.reset(
-        {
-          kcalLimit: preferences.kcalLimit?.toString() ?? '',
-          cycleStartDate: preferences.cycleStartDate ?? '',
-        },
-        { emitEvent: false },
-      );
-    });
-
-    this.form.valueChanges.pipe(takeUntilDestroyed(this.#destroyRef)).subscribe(() => {
-      if (this.saveState() !== 'idle') {
-        this.saveState.set('idle');
+      const targets = this.#sync.targets();
+      const { kcalLimit, cycleStartDate } = this.form.controls;
+      if (!kcalLimit.dirty) {
+        kcalLimit.setValue(
+          targetForDate(targets, this.form.controls.targetEffectiveFrom.value)?.toString() ?? '',
+          { emitEvent: false },
+        );
+      }
+      if (!cycleStartDate.dirty) {
+        cycleStartDate.setValue(preferences.cycleStartDate ?? '', { emitEvent: false });
       }
     });
   }
 
   protected async save(): Promise<void> {
-    if (this.form.invalid) {
+    if (this.saveState() === 'saving') {
+      return;
+    }
+    if (this.form.invalid || !isDateKey(this.form.controls.targetEffectiveFrom.value)) {
       this.form.markAllAsTouched();
+      this.error.set(
+        'Enter a valid target date and a positive whole-number target, or leave the target blank.',
+      );
       return;
     }
 
     this.saveState.set('saving');
+    this.error.set('');
+    const submitted = this.form.getRawValue();
 
     try {
-      await this.preferencesService.save(this.#getFormPreferences());
-      this.saveState.set('idle');
+      await this.preferencesService.save(this.#getFormPreferences(), {
+        updateCycleStartDate: this.form.controls.cycleStartDate.dirty,
+        updateKcalLimit:
+          this.form.controls.kcalLimit.dirty || this.form.controls.targetEffectiveFrom.dirty,
+        targetEffectiveFrom: submitted.targetEffectiveFrom,
+      });
+      for (const key of ['kcalLimit', 'cycleStartDate', 'targetEffectiveFrom'] as const) {
+        if (this.form.controls[key].value === submitted[key]) {
+          this.form.controls[key].markAsPristine();
+        }
+      }
       this.#toastService.success('Profile saved.', { title: 'Preferences updated' });
-    } catch {
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'Could not save preferences.');
+    } finally {
       this.saveState.set('idle');
-      this.#toastService.error('Could not save preferences.', { title: 'Save failed' });
     }
   }
 
   protected async startNewCycle(): Promise<void> {
-    this.form.controls.cycleStartDate.setValue(localDateToday());
-    await this.save();
-  }
-
-  protected downloadPreviousData(): void {
-    const data = this.previousData();
-    if (!data) {
+    if (this.saveState() === 'saving') {
       return;
     }
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
-    );
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'kcal-previous-device-data.json';
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1_000);
-  }
-
-  protected async recoverPreviousData(): Promise<void> {
-    const data = this.previousData();
-    if (!data || !this.ownsPreviousData() || this.recovering()) {
-      return;
-    }
-    this.recovering.set(true);
+    this.saveState.set('saving');
+    this.error.set('');
+    const submittedDate = this.form.controls.cycleStartDate.value;
     try {
-      await this.#sync.recoverPreviousData(data);
-      await this.preferencesService.load();
-      this.previousData.set(null);
-      this.#toastService.success('Previous device data recovered.');
-    } catch {
-      this.#toastService.error('Could not recover data. The original copy is still saved.');
+      await this.#sync.startNewCycle(this.today());
+      if (this.form.controls.cycleStartDate.value === submittedDate) {
+        this.form.controls.cycleStartDate.setValue(this.today());
+        this.form.controls.cycleStartDate.markAsPristine();
+      }
+      this.#toastService.success('Current period starts today.');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'Could not start period.');
     } finally {
-      this.recovering.set(false);
+      this.saveState.set('idle');
+    }
+  }
+
+  protected refreshTarget(): void {
+    if (!this.form.controls.kcalLimit.dirty) {
+      this.form.controls.kcalLimit.setValue(
+        targetForDate(
+          this.#sync.targets(),
+          this.form.controls.targetEffectiveFrom.value,
+        )?.toString() ?? '',
+      );
+    }
+  }
+
+  protected editTarget(target: KcalTarget): void {
+    this.form.controls.targetEffectiveFrom.setValue(target.effective_from);
+    this.form.controls.kcalLimit.setValue(target.kcal_limit?.toString() ?? '');
+    this.form.controls.targetEffectiveFrom.markAsDirty();
+    this.form.controls.kcalLimit.markAsDirty();
+  }
+
+  protected async deleteTarget(): Promise<void> {
+    const target = this.pendingDeleteTarget();
+    if (!target || this.saveState() === 'saving') {
+      return;
+    }
+    this.saveState.set('saving');
+    this.error.set('');
+    try {
+      await this.#sync.deleteTarget(target.id);
+      this.pendingDeleteTarget.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'Could not remove target.');
+    } finally {
+      this.saveState.set('idle');
     }
   }
 
@@ -135,8 +169,10 @@ export class ProfilePageComponent {
     const { kcalLimit, cycleStartDate } = this.form.getRawValue();
 
     return {
-      kcalLimit: kcalLimit === '' ? null : Number(kcalLimit),
-      cycleStartDate: cycleStartDate || null,
+      kcalLimit: kcalLimit == null || kcalLimit === '' ? null : Number(kcalLimit),
+      cycleStartDate: this.form.controls.cycleStartDate.dirty
+        ? cycleStartDate || null
+        : this.preferencesService.preferences().cycleStartDate,
     };
   }
 }

@@ -1,0 +1,200 @@
+<div class="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
+  <div>
+    <h1 class="text-2xl font-semibold">Trends &amp; periods</h1>
+    <p class="mt-1 text-sm text-base-content/65">
+      Food minus activity, compared with the target that applied each day.
+    </p>
+  </div>
+  <div class="flex flex-wrap gap-2" aria-label="Chart range">
+    @for (count of [7, 30, 90]; track count) {
+      <button
+        type="button"
+        class="btn btn-sm"
+        [class.btn-primary]="!selectedPeriod() && days() === count"
+        (click)="selectDays(count)"
+      >
+        {{ count }} days
+      </button>
+    }
+    @if (activeStarted()) {
+      <button
+        type="button"
+        class="btn btn-sm"
+        [class.btn-primary]="selectedPeriod() === 'active'"
+        (click)="viewPeriod('active')"
+      >
+        Current period
+      </button>
+    }
+  </div>
+  @if (activeStart() && !activeStarted()) {
+    <p class="text-sm text-base-content/65">
+      Your next period starts {{ activeStart() }}. Its charts will be available from that date.
+    </p>
+  }
+  <section class="rounded-box border border-base-300 bg-base-100 p-4">
+    <h2 class="font-semibold">{{ range().label }} · {{ range().start }} – {{ range().end }}</h2>
+    <dl class="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div>
+        <dt class="text-sm text-base-content/60">Net total</dt>
+        <dd class="text-xl font-semibold tabular-nums">
+          {{ summary().total | number: '1.0-0' }} kcal
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/60">Daily average</dt>
+        <dd class="text-xl font-semibold tabular-nums">
+          {{ summary().average | number: '1.0-0' }} kcal
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/60">Difference to target</dt>
+        <dd class="text-xl font-semibold tabular-nums">
+          {{ summary().difference === null ? '—' : (summary().difference | number: '1.0-0')
+          }}{{ summary().difference === null ? '' : ' kcal' }}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/60">Days with entries</dt>
+        <dd class="text-xl font-semibold tabular-nums">
+          {{ summary().loggedDays }} / {{ summary().days }}
+        </dd>
+      </div>
+    </dl>
+    @if (summary().targetDays !== summary().days) {
+      <p class="mt-3 text-sm text-base-content/65">
+        {{ summary().targetDays }} of {{ summary().days }} days have a target. A period difference
+        needs a target for every day. <a routerLink="/profile" class="link">Manage targets</a>
+      </p>
+    }
+  </section>
+  <section class="rounded-box border border-base-300 bg-base-100 p-4">
+    <h2 class="mb-3 font-semibold">Daily calories and seven-day average</h2>
+    <app-kcal-chart
+      label="Daily net calories, effective targets, and seven-day average"
+      [dates]="dates()"
+      [series]="dailySeries()"
+      [selectedIndex]="selectedIndex()"
+    />
+    <p class="mt-3 text-xs text-base-content/60">
+      Averages use seven calendar days. Days without entries count as zero; today's entries may be
+      partial.
+    </p>
+  </section>
+  <section class="rounded-box border border-base-300 bg-base-100 p-4">
+    <h2 class="mb-3 font-semibold">Cumulative difference since {{ range().start }}</h2>
+    <app-kcal-chart
+      label="Cumulative difference from daily targets"
+      [dates]="dates()"
+      [series]="cumulativeSeries()"
+      [selectedIndex]="selectedIndex()"
+    />
+    <p class="mt-3 text-xs text-base-content/60">
+      Negative values are below the combined target; positive values are above. The line stops when
+      a daily target is missing.
+    </p>
+  </section>
+  @if (clipped()) {
+    <p class="text-sm">The charts show the latest 366 days. Totals cover the entire period.</p>
+  }
+  @if (selectedDay(); as day) {
+    <section class="rounded-box border border-base-300 bg-base-100 p-4">
+      <label for="trend-day" class="font-semibold">Explore a day: {{ day.date }}</label>
+      <input
+        id="trend-day"
+        type="range"
+        class="range range-primary my-4 w-full"
+        min="0"
+        [max]="rows().length - 1"
+        [value]="selectedIndex()"
+        [attr.aria-valuetext]="day.date"
+        (input)="selectDay($event)"
+      />
+      <p class="text-sm" aria-live="polite">
+        {{ day.total | number: '1.0-0' }} net kcal · {{ day.entryCount }} entries · Target
+        {{ day.target === null ? 'not set' : (day.target | number: '1.0-0') }} · 7-day average
+        {{ day.rollingAverage | number: '1.0-0' }} kcal
+      </p>
+    </section>
+  }
+  <details class="rounded-box border border-base-300 bg-base-100 p-4">
+    <summary class="cursor-pointer font-semibold">Daily chart data</summary>
+    <div class="mt-3 max-h-96 overflow-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Net kcal</th>
+            <th>Target</th>
+            <th>7-day average</th>
+            <th>Cumulative difference</th>
+            <th>Entries</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (day of rows(); track day.date) {
+            <tr>
+              <td>{{ day.date }}</td>
+              <td>{{ day.total }}</td>
+              <td>{{ day.target ?? '—' }}</td>
+              <td>{{ day.rollingAverage | number: '1.0-0' }}</td>
+              <td>{{ day.cumulativeDifference ?? '—' }}</td>
+              <td>{{ day.entryCount }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+  <section id="periods" class="rounded-box border border-base-300 bg-base-100 p-4">
+    <h2 class="font-semibold">Period history</h2>
+    <p class="mt-1 text-sm text-base-content/65">
+      Starting a new period in <a routerLink="/profile" class="link">Profile</a> archives the
+      previous date range. Totals reflect your entries and dated targets.
+    </p>
+    @if (periodRows().length) {
+      <div class="mt-3 overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Dates</th>
+              <th>Net kcal</th>
+              <th>Daily average</th>
+              <th>Difference</th>
+              <th>Days with entries</th>
+              <th><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (period of periodRows(); track period.id) {
+              <tr>
+                <td class="whitespace-nowrap">{{ period.start_date }} – {{ period.end_date }}</td>
+                <td>{{ period.total | number: '1.0-0' }}</td>
+                <td>{{ period.average | number: '1.0-0' }}</td>
+                <td>
+                  {{
+                    period.difference === null
+                      ? 'Target missing'
+                      : (period.difference | number: '1.0-0')
+                  }}
+                </td>
+                <td>{{ period.loggedDays }} / {{ period.days }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    (click)="viewPeriod(period.id)"
+                  >
+                    View charts
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <p class="mt-4 text-sm text-base-content/60">No archived periods yet.</p>
+    }
+  </section>
+</div>

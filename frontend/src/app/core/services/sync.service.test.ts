@@ -1,6 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Injector, runInInjectionContext } from '@angular/core';
+import { Injector, runInInjectionContext, signal } from '@angular/core';
 import { describe, expect, it } from 'vitest';
 import { of } from 'rxjs';
 
@@ -8,6 +8,7 @@ import type { KcalEntry, KcalSyncResponse } from '../models/kcal.model';
 import { DbService, type PendingMutation, type SyncStateRecord } from './db.service';
 import { StorageService } from './storage.service';
 import { SyncService } from './sync.service';
+import { LocalDateService } from './local-date.service';
 
 class FakeTable<T extends object, TKey> {
   readonly #rows = new Map<TKey, T>();
@@ -83,6 +84,9 @@ class FakeTable<T extends object, TKey> {
 }
 
 class FakeDbService {
+  readonly targets = new FakeTable({ getKey: (value: { id: string }) => value.id });
+  readonly periods = new FakeTable({ getKey: (value: { id: string }) => value.id });
+  readonly meals = new FakeTable({ getKey: (value: { id: string }) => value.id });
   readonly templates = new FakeTable({
     getKey: (value: { id: string }) => value.id,
   });
@@ -157,6 +161,7 @@ async function createService(options: {
       { provide: HttpClient, useValue: options.http },
       { provide: StorageService, useValue: options.storage },
       { provide: DbService, useValue: options.db },
+      { provide: LocalDateService, useValue: { today: signal('2026-10-22') } },
     ],
   });
 
@@ -597,7 +602,7 @@ describe('SyncService', () => {
 
     expect(service.syncNotice()).toEqual({
       title: 'Some offline changes were skipped',
-      message: 'The server already had newer versions of some queued edits.',
+      message: 'Some queued edits conflicted with the current server data.',
       details: [
         {
           message:

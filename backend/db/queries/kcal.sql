@@ -154,10 +154,34 @@ INSERT INTO sync_metadata (
 )
 ON CONFLICT (user_id) DO NOTHING;
 
+-- name: GetKcalPeriodStartForUpdate :one
+SELECT *
+FROM kcal_period_starts
+WHERE user_id = $1
+FOR UPDATE;
+
+-- name: UpsertKcalPeriodStart :one
+INSERT INTO kcal_period_starts (
+    user_id,
+    cycle_start_date,
+    client_updated_at,
+    server_updated_at
+) VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id) DO UPDATE
+SET cycle_start_date = EXCLUDED.cycle_start_date,
+    client_updated_at = EXCLUDED.client_updated_at,
+    server_updated_at = EXCLUDED.server_updated_at,
+    global_version = EXCLUDED.global_version
+RETURNING *;
+
 -- name: ReadSyncMetadata :one
 SELECT GREATEST(
        COALESCE((SELECT MAX(template_items.global_version) FROM kcal_template_items AS template_items WHERE template_items.user_id = $1), 0),
        COALESCE((SELECT MAX(entries.global_version) FROM kcal_entries AS entries WHERE entries.user_id = $1), 0),
+       COALESCE((SELECT period_starts.global_version FROM kcal_period_starts AS period_starts WHERE period_starts.user_id = $1), 0),
+       COALESCE((SELECT MAX(global_version) FROM kcal_targets WHERE user_id = $1), 0),
+       COALESCE((SELECT MAX(global_version) FROM kcal_periods WHERE user_id = $1), 0),
+       COALESCE((SELECT MAX(global_version) FROM kcal_meals WHERE user_id = $1), 0),
        metadata.min_valid_version
        )::BIGINT AS current_version,
      metadata.min_valid_version
@@ -174,6 +198,12 @@ SELECT entity_table,
        kcal_amount,
        kcal_delta,
        happened_at,
+       cycle_start_date,
+       effective_from,
+       kcal_limit,
+       start_date,
+       end_date,
+       items,
        client_updated_at,
        server_updated_at,
        global_version,
@@ -181,13 +211,19 @@ SELECT entity_table,
 FROM (
     SELECT 'kcal_template_items'::text AS entity_table,
            id,
-           kind::text,
+           kind::text AS kind,
            name,
-           amount::text,
+           amount::text AS amount,
            unit,
            kcal_amount,
            NULL::integer AS kcal_delta,
            NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
            client_updated_at,
            server_updated_at,
            global_version,
@@ -200,20 +236,126 @@ FROM (
 
     SELECT 'kcal_entries'::text AS entity_table,
            id,
-          ''::text AS kind,
-          ''::text AS name,
-          ''::text AS amount,
-          ''::text AS unit,
-          0::integer AS kcal_amount,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
            kcal_delta,
            happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
            client_updated_at,
            server_updated_at,
            global_version,
-          (deleted_at IS NOT NULL)::boolean AS deleted
+           (deleted_at IS NOT NULL)::boolean AS deleted
     FROM kcal_entries AS entries
     WHERE entries.user_id = $1
       AND entries.global_version > $2
+
+    UNION ALL
+
+    SELECT 'kcal_period_starts'::text AS entity_table,
+           '00000000-0000-0000-0000-000000000001'::uuid AS id,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           to_char(cycle_start_date, 'YYYY-MM-DD')::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           FALSE::boolean AS deleted
+    FROM kcal_period_starts AS period_starts
+    WHERE period_starts.user_id = $1
+      AND period_starts.global_version > $2
+
+    UNION ALL
+
+    SELECT 'kcal_targets'::text AS entity_table,
+           id,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           to_char(effective_from, 'YYYY-MM-DD')::text AS effective_from,
+           kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           (deleted_at IS NOT NULL)::boolean AS deleted
+    FROM kcal_targets AS targets
+    WHERE targets.user_id = $1
+      AND targets.global_version > $2
+
+    UNION ALL
+
+    SELECT 'kcal_periods'::text AS entity_table,
+           id,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           to_char(start_date, 'YYYY-MM-DD')::text AS start_date,
+           to_char(end_date, 'YYYY-MM-DD')::text AS end_date,
+           NULL::jsonb AS items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           (deleted_at IS NOT NULL)::boolean AS deleted
+    FROM kcal_periods AS periods
+    WHERE periods.user_id = $1
+      AND periods.global_version > $2
+
+    UNION ALL
+
+    SELECT 'kcal_meals'::text AS entity_table,
+           id,
+           ''::text AS kind,
+           name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           (deleted_at IS NOT NULL)::boolean AS deleted
+    FROM kcal_meals AS meals
+    WHERE meals.user_id = $1
+      AND meals.global_version > $2
 ) AS sync_records
 ORDER BY global_version, entity_table, id;
 
@@ -227,6 +369,12 @@ SELECT entity_table,
        kcal_amount,
        kcal_delta,
        happened_at,
+       cycle_start_date,
+       effective_from,
+       kcal_limit,
+       start_date,
+       end_date,
+       items,
        client_updated_at,
        server_updated_at,
        global_version,
@@ -234,13 +382,19 @@ SELECT entity_table,
 FROM (
     SELECT 'kcal_template_items'::text AS entity_table,
            id,
-           kind::text,
+           kind::text AS kind,
            name,
-           amount::text,
+           amount::text AS amount,
            unit,
            kcal_amount,
            NULL::integer AS kcal_delta,
            NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
            client_updated_at,
            server_updated_at,
            global_version,
@@ -253,21 +407,126 @@ FROM (
 
     SELECT 'kcal_entries'::text AS entity_table,
            id,
-          ''::text AS kind,
-          ''::text AS name,
-          ''::text AS amount,
-          ''::text AS unit,
-          0::integer AS kcal_amount,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
            kcal_delta,
            happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
            client_updated_at,
            server_updated_at,
            global_version,
-          FALSE::boolean AS deleted
+           FALSE::boolean AS deleted
     FROM kcal_entries AS entries
     WHERE entries.user_id = $1
       AND entries.deleted_at IS NULL
-) AS sync_snapshot
+
+    UNION ALL
+
+    SELECT 'kcal_period_starts'::text AS entity_table,
+           '00000000-0000-0000-0000-000000000001'::uuid AS id,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           to_char(cycle_start_date, 'YYYY-MM-DD')::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           FALSE::boolean AS deleted
+    FROM kcal_period_starts AS period_starts
+    WHERE period_starts.user_id = $1
+
+    UNION ALL
+
+    SELECT 'kcal_targets'::text AS entity_table,
+           id,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           to_char(effective_from, 'YYYY-MM-DD')::text AS effective_from,
+           kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           NULL::jsonb AS items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           FALSE::boolean AS deleted
+    FROM kcal_targets AS targets
+    WHERE targets.user_id = $1
+      AND targets.deleted_at IS NULL
+
+    UNION ALL
+
+    SELECT 'kcal_periods'::text AS entity_table,
+           id,
+           ''::text AS kind,
+           ''::text AS name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           to_char(start_date, 'YYYY-MM-DD')::text AS start_date,
+           to_char(end_date, 'YYYY-MM-DD')::text AS end_date,
+           NULL::jsonb AS items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           FALSE::boolean AS deleted
+    FROM kcal_periods AS periods
+    WHERE periods.user_id = $1
+      AND periods.deleted_at IS NULL
+
+    UNION ALL
+
+    SELECT 'kcal_meals'::text AS entity_table,
+           id,
+           ''::text AS kind,
+           name,
+           ''::text AS amount,
+           ''::text AS unit,
+           0::integer AS kcal_amount,
+           NULL::integer AS kcal_delta,
+           NULL::timestamptz AS happened_at,
+           NULL::text AS cycle_start_date,
+           NULL::text AS effective_from,
+           NULL::integer AS kcal_limit,
+           NULL::text AS start_date,
+           NULL::text AS end_date,
+           items,
+           client_updated_at,
+           server_updated_at,
+           global_version,
+           FALSE::boolean AS deleted
+    FROM kcal_meals AS meals
+    WHERE meals.user_id = $1
+      AND meals.deleted_at IS NULL
+) AS sync_records
 ORDER BY server_updated_at DESC, entity_table, id;
 
 -- name: DeleteExpiredTemplateTombstones :many

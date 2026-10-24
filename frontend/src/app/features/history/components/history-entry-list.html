@@ -22,6 +22,15 @@
           <div class="flex items-center gap-1">
             <button
               type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="repeatLoading()"
+              (click)="repeatEntry.emit(entry)"
+              aria-label="Repeat entry today"
+            >
+              Repeat today
+            </button>
+            <button
+              type="button"
               class="btn btn-ghost btn-md btn-square"
               aria-label="Edit entry"
               (click)="openEdit.emit(entry)"

@@ -1,11 +1,76 @@
 import { KcalEntry, KcalSyncChange, KcalSyncRequest } from '../models/kcal.model';
 
-export type PendingMutationKind = 'template' | 'entry';
+export type PendingMutationKind = 'template' | 'entry' | 'period' | 'target' | 'archive' | 'meal';
 
 export interface QueuedSyncMutation {
   id?: number;
   kind: PendingMutationKind;
   payload: KcalSyncChange;
+}
+
+export const MAX_SYNC_REQUEST_BYTES = 900 * 1024;
+
+export class SyncBatchError extends Error {}
+
+export function selectSyncBatch(
+  deviceId: string,
+  lastSyncSeq: number,
+  userId: string,
+  mutations: QueuedSyncMutation[],
+): QueuedSyncMutation[] {
+  const pending = dedupeQueuedMutations(mutations);
+  const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+  const envelopeBytes = bytes({
+    ...buildBatchSyncRequest(deviceId, lastSyncSeq, []),
+    user_id: userId,
+  });
+  const periods = pending.filter((item) => item.kind === 'period' || item.kind === 'archive');
+  const independent = pending.filter((item) => item.kind !== 'period' && item.kind !== 'archive');
+  const batch: QueuedSyncMutation[] = [];
+  let size = envelopeBytes;
+  for (const mutation of periods) {
+    size += bytes(mutation.payload) + (batch.length > 0 ? 1 : 0);
+    if (size > MAX_SYNC_REQUEST_BYTES) {
+      throw new SyncBatchError(
+        'Too many unsynced period changes to upload together. Export a backup and reduce the pending period changes before retrying.',
+      );
+    }
+    batch.push(mutation);
+  }
+  for (const mutation of independent) {
+    if (batch.length >= Math.max(200, periods.length)) {
+      break;
+    }
+    const nextSize = size + bytes(mutation.payload) + (batch.length > 0 ? 1 : 0);
+    if (nextSize > MAX_SYNC_REQUEST_BYTES) {
+      if (!batch.length) {
+        throw new SyncBatchError(
+          'A saved record is too large to upload. Shorten its text or remove it, then retry.',
+        );
+      }
+      break;
+    }
+    batch.push(mutation);
+    size = nextSize;
+  }
+  return batch;
+}
+
+export function syncMutationKind(change: KcalSyncChange): PendingMutationKind {
+  switch (change.entity_table) {
+    case 'kcal_template_items':
+      return 'template';
+    case 'kcal_entries':
+      return 'entry';
+    case 'kcal_period_starts':
+      return 'period';
+    case 'kcal_targets':
+      return 'target';
+    case 'kcal_periods':
+      return 'archive';
+    case 'kcal_meals':
+      return 'meal';
+  }
 }
 
 export function normalizeKcalDelta(value: number): number {
@@ -61,10 +126,9 @@ export function normalizeSyncChange(change: KcalSyncChange): KcalSyncChange {
     };
   }
 
-  return {
-    ...change,
-    kcal_delta: normalizeKcalDelta(change.kcal_delta),
-  };
+  return change.entity_table === 'kcal_entries'
+    ? { ...change, kcal_delta: normalizeKcalDelta(change.kcal_delta) }
+    : change;
 }
 
 function normalizeQueuedMutation(mutation: QueuedSyncMutation): QueuedSyncMutation {

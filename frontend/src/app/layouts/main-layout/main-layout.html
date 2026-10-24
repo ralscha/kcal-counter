@@ -259,7 +259,7 @@
                 @for (detail of syncNotice.details; track detail.message) {
                   <li>
                     <span>{{ detail.message }}</span>
-                    @if (detail.routeCommands && detail.queryParams && detail.reviewLabel) {
+                    @if (detail.routeCommands && detail.reviewLabel) {
                       <a
                         class="link link-hover ml-2 text-xs font-semibold sm:text-sm"
                         [routerLink]="detail.routeCommands"

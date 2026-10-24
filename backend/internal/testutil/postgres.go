@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -16,7 +17,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-const postgresImage = "postgres:18-alpine"
+const defaultPostgresImage = "postgres:18-alpine"
 
 var (
 	sharedPostgresOnce sync.Once
@@ -88,9 +89,13 @@ func isPostgresContainerUnavailable(err error) bool {
 }
 func sharedPostgresConnectionString(ctx context.Context) (string, error) {
 	sharedPostgresOnce.Do(func() {
+		image := strings.TrimSpace(os.Getenv("KCAL_COUNTER_TEST_POSTGRES_IMAGE"))
+		if image == "" {
+			image = defaultPostgresImage
+		}
 		container, err := tcpostgres.Run(
 			ctx,
-			postgresImage,
+			image,
 			tcpostgres.BasicWaitStrategies(),
 			tcpostgres.WithDatabase("kcal_counter"),
 			tcpostgres.WithUsername("kcal_counter_user"),

@@ -49,6 +49,18 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/profile/profile').then((m) => m.ProfilePageComponent),
       },
+      {
+        path: 'meals',
+        loadComponent: () => import('./features/meals/meals').then((m) => m.MealsComponent),
+      },
+      {
+        path: 'trends',
+        loadComponent: () => import('./features/trends/trends').then((m) => m.TrendsComponent),
+      },
+      {
+        path: 'backup',
+        loadComponent: () => import('./features/backup/backup').then((m) => m.BackupPageComponent),
+      },
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
     ],
   },
