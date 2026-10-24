@@ -176,4 +176,31 @@
       </section>
     </div>
   </div>
+
+  <div class="mt-4 flex items-center justify-between gap-3 text-sm">
+    <p role="status" aria-live="polite">
+      @if (sync.syncing()) {
+        Syncing...
+      } @else if (sync.syncError()) {
+        {{ sync.syncError() }}
+      } @else if (sync.pendingCount() > 0) {
+        Saved on this device.
+      } @else if (sync.lastSyncedAt()) {
+        All changes synced.
+      } @else {
+        Ready to sync.
+      }
+      @if (sync.pendingCount() > 0) {
+        <span>{{ sync.pendingCount() }} pending.</span>
+      }
+    </p>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm shrink-0"
+      [disabled]="sync.syncing()"
+      (click)="sync.pull()"
+    >
+      Sync now
+    </button>
+  </div>
 </div>

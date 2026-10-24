@@ -29,11 +29,11 @@ export class ProfilePageComponent {
   protected readonly preferencesService = inject(ProfilePreferencesService);
   readonly #toastService = inject(ToastService);
   readonly #fb = inject(FormBuilder);
-  readonly #sync = inject(SyncService);
+  protected readonly sync = inject(SyncService);
   protected readonly today = inject(LocalDateService).today;
-  protected readonly periodReady = computed(() => this.#sync.lastSyncedAt() !== null);
+  protected readonly periodReady = computed(() => this.sync.lastSyncedAt() !== null);
   protected readonly targets = computed(() =>
-    this.#sync
+    this.sync
       .targets()
       .slice()
       .sort((a, b) => b.effective_from.localeCompare(a.effective_from)),
@@ -59,7 +59,7 @@ export class ProfilePageComponent {
       }
 
       const preferences = this.preferencesService.preferences();
-      const targets = this.#sync.targets();
+      const targets = this.sync.targets();
       const { kcalLimit, cycleStartDate } = this.form.controls;
       if (!kcalLimit.dirty) {
         kcalLimit.setValue(
@@ -117,7 +117,7 @@ export class ProfilePageComponent {
     this.error.set('');
     const submittedDate = this.form.controls.cycleStartDate.value;
     try {
-      await this.#sync.startNewCycle(this.today());
+      await this.sync.startNewCycle(this.today());
       if (this.form.controls.cycleStartDate.value === submittedDate) {
         this.form.controls.cycleStartDate.setValue(this.today());
         this.form.controls.cycleStartDate.markAsPristine();
@@ -134,7 +134,7 @@ export class ProfilePageComponent {
     if (!this.form.controls.kcalLimit.dirty) {
       this.form.controls.kcalLimit.setValue(
         targetForDate(
-          this.#sync.targets(),
+          this.sync.targets(),
           this.form.controls.targetEffectiveFrom.value,
         )?.toString() ?? '',
       );
@@ -156,7 +156,7 @@ export class ProfilePageComponent {
     this.saveState.set('saving');
     this.error.set('');
     try {
-      await this.#sync.deleteTarget(target.id);
+      await this.sync.deleteTarget(target.id);
       this.pendingDeleteTarget.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : 'Could not remove target.');
