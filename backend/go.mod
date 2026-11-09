@@ -16,7 +16,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/ralscha/ratelimiter-pg v0.0.0-20261025115219-c2bbf5512244
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0
 )
 
 require (
@@ -71,7 +71,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.10 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	github.com/testcontainers/testcontainers-go v0.44.0 // indirect
+	github.com/testcontainers/testcontainers-go v0.45.0 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
