@@ -156,8 +156,8 @@ github.com/ralscha/ratelimiter-pg v0.0.0-20261117042850-2b9bdb4a91f3/go.mod h1:6
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rogpeppe/go-internal v1.6.1/go.mod h1:xXDCJY+GAPziupqXw64V24skbSoqbTEfhy4qGm1nDQc=
-github.com/sethvargo/go-retry v0.5.0 h1:JYfFKmVJ8ER06GReN1efzc5cm52BrVsFVzmcHiKJwfY=
-github.com/sethvargo/go-retry v0.5.0/go.mod h1:tvsjdKG6xfiCx4LSiUZ06kcv38xvdVQwv8R6/VnnVWg=
+github.com/sethvargo/go-retry v0.6.0 h1:FyceERFjz2QVNLXeB7dbDkKlJRUhGf/M7PrfrkHn3BA=
+github.com/sethvargo/go-retry v0.6.0/go.mod h1:JpLL2+Q6sMCuaK1j4au0G4Lllk4teCN+XAB/XdP69GQ=
 github.com/shirou/gopsutil/v4 v4.26.10 h1:MJN6euesJx53MVEjscYeyRSRcrdIcy3sz5k9nosjldg=
 github.com/shirou/gopsutil/v4 v4.26.10/go.mod h1:XpkIrcUMQhwte/dGxu57KtnMMFsbKelI7PP23zweKBk=
 github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
